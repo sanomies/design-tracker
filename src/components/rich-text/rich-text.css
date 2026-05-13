@@ -1,0 +1,135 @@
+/* Shared styles for TipTap editor + read-only content. */
+
+.tiptap-content {
+  @apply text-sm leading-relaxed break-words;
+}
+
+.tiptap-content p {
+  @apply my-1;
+}
+
+.tiptap-content p:first-child {
+  @apply mt-0;
+}
+
+.tiptap-content p:last-child {
+  @apply mb-0;
+}
+
+.tiptap-content h1 {
+  @apply text-xl font-semibold mt-3 mb-1 leading-tight;
+}
+
+.tiptap-content h2 {
+  @apply text-lg font-semibold mt-3 mb-1 leading-tight;
+}
+
+.tiptap-content ul {
+  @apply list-disc pl-5 my-1;
+}
+
+.tiptap-content ol {
+  @apply list-decimal pl-5 my-1;
+}
+
+.tiptap-content li > p {
+  @apply my-0;
+}
+
+.tiptap-content blockquote {
+  @apply border-l-2 border-border pl-3 italic text-muted-foreground my-2;
+}
+
+.tiptap-content hr {
+  @apply my-3 border-t border-border;
+}
+
+.tiptap-content code {
+  @apply rounded bg-muted px-1 py-0.5 text-xs font-mono;
+}
+
+.tiptap-content pre {
+  @apply rounded bg-muted p-2 my-2 text-xs font-mono overflow-x-auto;
+}
+
+.tiptap-content pre code {
+  @apply bg-transparent p-0;
+}
+
+.tiptap-content strong {
+  @apply font-semibold;
+}
+
+.tiptap-content em {
+  @apply italic;
+}
+
+.tiptap-content u {
+  text-decoration: underline;
+}
+
+.tiptap-content s {
+  text-decoration: line-through;
+}
+
+.tiptap-content a {
+  @apply text-primary underline underline-offset-2;
+}
+
+.tiptap-content img,
+.tiptap-content .tiptap-image {
+  @apply rounded max-w-full h-auto my-2;
+}
+
+.tiptap-content table {
+  @apply w-full border-collapse my-2 text-sm;
+}
+
+.tiptap-content table th,
+.tiptap-content table td {
+  @apply border border-border px-2 py-1 align-top;
+  min-width: 60px;
+}
+
+.tiptap-content table th {
+  @apply bg-muted font-medium text-left;
+}
+
+/* Empty-state placeholder for the editor (relies on data-placeholder). */
+.tiptap-content.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply text-muted-foreground pointer-events-none float-left h-0;
+}
+
+.tiptap-content.ProseMirror:focus {
+  outline: none;
+}
+
+/* Selected cell highlight inside the table editor. */
+.tiptap-content .selectedCell:after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: hsl(var(--accent));
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.tiptap-content table .selectedCell {
+  position: relative;
+}
+
+/* Mention chips. */
+.mention {
+  @apply inline-flex items-center rounded px-1 py-0 text-sm font-medium bg-primary/10 text-primary;
+}
+
+/* Mention suggestion popup container injected by tippy.js. */
+.tippy-box[data-theme~="mention"] {
+  background: transparent;
+  box-shadow: none;
+}
+
+.tippy-box[data-theme~="mention"] .tippy-content {
+  padding: 0;
+}
