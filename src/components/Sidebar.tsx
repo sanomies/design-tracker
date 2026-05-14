@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { LogOut, Plus } from "lucide-react";
+import { Check, ChevronDown, LogOut, Plus, Users } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { avatarColor } from "@/lib/avatarColor";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,24 +14,38 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { InboxLink } from "@/features/notifications/InboxLink";
 import { NewProjectDialog } from "@/features/projects/NewProjectDialog";
 import { ProjectRow } from "@/features/projects/ProjectRow";
 import { useProjects } from "@/features/projects/useProjects";
-import { useWorkspace } from "@/features/workspaces/useWorkspace";
+import { MyTasksLink } from "@/features/tasks/MyTasksLink";
+import { useCurrentWorkspaceId } from "@/features/workspaces/CurrentWorkspaceProvider";
+import { MembersDialog } from "@/features/workspaces/MembersDialog";
+import { useWorkspace, useWorkspaces } from "@/features/workspaces/useWorkspace";
+import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const { data: workspace, isLoading: workspaceLoading } = useWorkspace();
+  const [membersOpen, setMembersOpen] = useState(false);
 
   return (
-    <aside className="w-64 shrink-0 border-r bg-muted/30 flex flex-col">
-      <div className="px-4 h-14 border-b flex items-center">
+    <aside className="w-64 shrink-0 border-r bg-[#F5F7FA] flex flex-col">
+      <div className="px-2 h-14 border-b flex items-center">
         {workspaceLoading ? (
-          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-32 mx-2 flex-1" />
         ) : (
-          <h2 className="text-sm font-semibold truncate" title={workspace?.name}>
-            {workspace?.name ?? "Workspace"}
-          </h2>
+          <WorkspaceSwitcher
+            currentName={workspace?.name ?? "Workspace"}
+            onOpenMembers={() => setMembersOpen(true)}
+          />
         )}
+      </div>
+
+      {/* Top-level nav rows between the workspace header and the projects
+          list: Inbox and My tasks. Unread/assigned counts render as badges. */}
+      <div className="px-2 py-[13.5px] border-b space-y-0.5">
+        <InboxLink />
+        <MyTasksLink />
       </div>
 
       <ProjectsSection workspaceId={workspace?.id} />
@@ -38,7 +53,68 @@ export function Sidebar() {
       <div className="p-2 border-t">
         <UserMenu />
       </div>
+
+      <MembersDialog
+        workspace={workspace ?? null}
+        open={membersOpen}
+        onOpenChange={setMembersOpen}
+      />
     </aside>
+  );
+}
+
+function WorkspaceSwitcher({
+  currentName,
+  onOpenMembers,
+}: {
+  currentName: string;
+  onOpenMembers: () => void;
+}) {
+  const { data: workspaces } = useWorkspaces();
+  const { currentWorkspaceId, setCurrentWorkspaceId } = useCurrentWorkspaceId();
+  // Fall back to the first workspace's id when nothing's saved yet, so the
+  // checkmark renders correctly on first load.
+  const effectiveCurrentId = currentWorkspaceId ?? workspaces?.[0]?.id ?? null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="w-full flex items-center gap-1 rounded-md px-2 py-1.5 hover:bg-accent text-left"
+          aria-label="Switch workspace"
+        >
+          <span className="text-sm font-semibold truncate flex-1" title={currentName}>
+            {currentName}
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-60">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">
+          Workspaces
+        </DropdownMenuLabel>
+        {workspaces?.map((w) => (
+          <DropdownMenuItem
+            key={w.id}
+            onSelect={() => setCurrentWorkspaceId(w.id)}
+            className="gap-2"
+          >
+            <Check
+              className={cn(
+                "h-3.5 w-3.5",
+                w.id === effectiveCurrentId ? "opacity-100" : "opacity-0"
+              )}
+            />
+            <span className="truncate">{w.name}</span>
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onOpenMembers}>
+          <Users className="mr-2 h-3.5 w-3.5" />
+          Workspace members
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -110,7 +186,9 @@ function UserMenu() {
           aria-label="Account menu"
         >
           <Avatar className="h-7 w-7">
-            <AvatarFallback className="text-xs">{initials || "?"}</AvatarFallback>
+            <AvatarFallback className={cn("text-xs", avatarColor(user?.id))}>
+              {initials || "?"}
+            </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium truncate">{fullName}</p>

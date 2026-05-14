@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { supabase } from "@/lib/supabase";
 import type { Profile } from "@/types/database";
 
@@ -25,9 +26,20 @@ async function fetchWorkspaceMembers(workspaceId: string): Promise<Profile[]> {
 }
 
 export function useWorkspaceMembers(workspaceId: string | undefined) {
-  return useQuery({
+  const result = useQuery({
     queryKey: ["workspace-members", workspaceId],
     queryFn: () => fetchWorkspaceMembers(workspaceId!),
     enabled: !!workspaceId,
   });
+
+  // Live-update the assignee dropdown / mention popup when someone joins or
+  // leaves the workspace.
+  useRealtimeInvalidate({
+    table: "workspace_members",
+    filter: workspaceId ? `workspace_id=eq.${workspaceId}` : undefined,
+    queryKey: ["workspace-members", workspaceId],
+    enabled: !!workspaceId,
+  });
+
+  return result;
 }

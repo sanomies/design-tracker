@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useAuth } from "@/features/auth/AuthProvider";
+import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { supabase } from "@/lib/supabase";
 import type { Task, TaskUpdate } from "@/types/database";
 
@@ -10,15 +11,17 @@ const tasksKey = (projectId: string | undefined) => ["tasks", projectId] as cons
 // Reads -----------------------------------------------------------------
 
 export function useTasks(projectId: string | undefined) {
-  return useQuery({
+  const result = useQuery({
     queryKey: tasksKey(projectId),
     queryFn: async (): Promise<Task[]> => {
       if (!projectId) return [];
+      // Returns the full task tree for this project (top-level + subtasks).
+      // Components filter and group as needed: TaskList shows top-level
+      // (`parent_task_id IS NULL`); SubtaskList filters by parent.
       const { data, error } = await supabase
         .from("tasks")
         .select("*")
         .eq("project_id", projectId)
-        .is("parent_task_id", null) // v1: top-level tasks only
         .order("position", { ascending: true })
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -26,17 +29,34 @@ export function useTasks(projectId: string | undefined) {
     },
     enabled: !!projectId,
   });
+
+  useRealtimeInvalidate({
+    table: "tasks",
+    filter: projectId ? `project_id=eq.${projectId}` : undefined,
+    queryKey: tasksKey(projectId),
+    enabled: !!projectId,
+  });
+
+  return result;
 }
 
 // Create ----------------------------------------------------------------
 
-type CreateInput = { title: string };
+type CreateInput = {
+  title: string;
+  parentTaskId?: string | null;
+  sectionId?: string | null;
+};
 
 export function useCreateTask(projectId: string | undefined) {
   const qc = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async ({ title }: CreateInput): Promise<Task> => {
+    mutationFn: async ({
+      title,
+      parentTaskId,
+      sectionId,
+    }: CreateInput): Promise<Task> => {
       if (!projectId) throw new Error("No project");
       // Date.now() as position keeps new tasks at the bottom and leaves
       // room between values for future drag-reordering.
@@ -45,6 +65,8 @@ export function useCreateTask(projectId: string | undefined) {
         .from("tasks")
         .insert({
           project_id: projectId,
+          section_id: sectionId ?? null,
+          parent_task_id: parentTaskId ?? null,
           title,
           position,
           created_by: user?.id ?? null,
@@ -54,13 +76,14 @@ export function useCreateTask(projectId: string | undefined) {
       if (error) throw error;
       return data;
     },
-    onMutate: async ({ title }) => {
+    onMutate: async ({ title, parentTaskId, sectionId }) => {
       await qc.cancelQueries({ queryKey: tasksKey(projectId) });
       const previous = qc.getQueryData<Task[]>(tasksKey(projectId));
       const optimistic: Task = {
         id: `temp-${crypto.randomUUID()}`,
         project_id: projectId ?? "",
-        parent_task_id: null,
+        section_id: sectionId ?? null,
+        parent_task_id: parentTaskId ?? null,
         title,
         description: null,
         assignee_id: null,
@@ -70,6 +93,7 @@ export function useCreateTask(projectId: string | undefined) {
         position: Date.now(),
         created_at: new Date().toISOString(),
         created_by: user?.id ?? null,
+        completed_at: null,
       };
       qc.setQueryData<Task[]>(tasksKey(projectId), (old = []) => [...old, optimistic]);
       return { previous };

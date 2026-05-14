@@ -81,6 +81,22 @@
   @apply rounded max-w-full h-auto my-2;
 }
 
+/* Comment images cap at 550px so a single huge screenshot doesn't blow
+   out the comment card. `min(550px, 100%)` so the cap kicks in on wide
+   panels but the image still shrinks to fit when the panel is narrower
+   than 550px — otherwise a fixed 550px would overflow narrow cards. */
+.tiptap-content.comment-body img,
+.tiptap-content.comment-body .tiptap-image {
+  max-width: min(550px, 100%);
+}
+
+/* Center any paragraph that contains an inline image so the preview sits
+   in the middle of the comment card. Text-only paragraphs stay left-
+   aligned because the :has() match only fires when the image is present. */
+.tiptap-content.comment-body p:has(> .tiptap-inline-image) {
+  text-align: center;
+}
+
 .tiptap-content table {
   @apply w-full border-collapse my-2 text-sm;
 }

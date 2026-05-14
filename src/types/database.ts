@@ -111,10 +111,60 @@ export type Database = {
           created_at?: string;
         };
       };
+      sections: {
+        Row: {
+          id: string;
+          project_id: string;
+          name: string;
+          position: number;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          name: string;
+          position?: number;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          project_id?: string;
+          name?: string;
+          position?: number;
+          created_at?: string;
+          created_by?: string | null;
+        };
+      };
+      my_task_sections: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          position: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          position?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          position?: number;
+          created_at?: string;
+        };
+      };
       tasks: {
         Row: {
           id: string;
           project_id: string;
+          section_id: string | null;
           parent_task_id: string | null;
           title: string;
           description: string | null;
@@ -125,10 +175,14 @@ export type Database = {
           position: number;
           created_at: string;
           created_by: string | null;
+          completed_at: string | null;
+          my_section_id: string | null;
+          my_position: number | null;
         };
         Insert: {
           id?: string;
           project_id: string;
+          section_id?: string | null;
           parent_task_id?: string | null;
           title: string;
           description?: string | null;
@@ -139,10 +193,14 @@ export type Database = {
           position?: number;
           created_at?: string;
           created_by?: string | null;
+          completed_at?: string | null;
+          my_section_id?: string | null;
+          my_position?: number | null;
         };
         Update: {
           id?: string;
           project_id?: string;
+          section_id?: string | null;
           parent_task_id?: string | null;
           title?: string;
           description?: string | null;
@@ -153,6 +211,9 @@ export type Database = {
           position?: number;
           created_at?: string;
           created_by?: string | null;
+          completed_at?: string | null;
+          my_section_id?: string | null;
+          my_position?: number | null;
         };
       };
       comments: {
@@ -176,6 +237,100 @@ export type Database = {
           author_id?: string | null;
           body?: string;
           created_at?: string;
+        };
+      };
+      notifications: {
+        Row: {
+          id: string;
+          recipient_id: string;
+          actor_id: string | null;
+          type:
+            | "mention"
+            | "comment"
+            | "assigned"
+            | "unassigned"
+            | "completed"
+            | "deleted"
+            | "invite_accepted";
+          task_id: string | null;
+          comment_id: string | null;
+          data: Json | null;
+          read_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          recipient_id: string;
+          actor_id?: string | null;
+          type:
+            | "mention"
+            | "comment"
+            | "assigned"
+            | "unassigned"
+            | "completed"
+            | "deleted"
+            | "invite_accepted";
+          task_id?: string | null;
+          comment_id?: string | null;
+          data?: Json | null;
+          read_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          recipient_id?: string;
+          actor_id?: string | null;
+          type?:
+            | "mention"
+            | "comment"
+            | "assigned"
+            | "unassigned"
+            | "completed"
+            | "deleted"
+            | "invite_accepted";
+          task_id?: string | null;
+          comment_id?: string | null;
+          data?: Json | null;
+          read_at?: string | null;
+          created_at?: string;
+        };
+      };
+      workspace_invitations: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          invited_email: string | null;
+          token: string;
+          role: WorkspaceRole;
+          created_by: string | null;
+          created_at: string;
+          expires_at: string;
+          accepted_at: string | null;
+          accepted_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          invited_email?: string | null;
+          token: string;
+          role?: WorkspaceRole;
+          created_by?: string | null;
+          created_at?: string;
+          expires_at?: string;
+          accepted_at?: string | null;
+          accepted_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          invited_email?: string | null;
+          token?: string;
+          role?: WorkspaceRole;
+          created_by?: string | null;
+          created_at?: string;
+          expires_at?: string;
+          accepted_at?: string | null;
+          accepted_by?: string | null;
         };
       };
       attachments: {
@@ -224,6 +379,23 @@ export type Database = {
         Args: { _task_id: string };
         Returns: string;
       };
+      invitation_by_token: {
+        Args: { _token: string };
+        Returns: Array<{
+          id: string;
+          workspace_id: string;
+          workspace_name: string;
+          invited_email: string | null;
+          role: WorkspaceRole;
+          created_at: string;
+          expires_at: string;
+          accepted_at: string | null;
+        }>;
+      };
+      accept_invitation: {
+        Args: { _token: string };
+        Returns: string;
+      };
     };
     Enums: Record<string, never>;
   };
@@ -236,8 +408,13 @@ export type Workspace = T["workspaces"]["Row"];
 export type WorkspaceMember = T["workspace_members"]["Row"];
 export type Project = T["projects"]["Row"];
 export type ProjectMember = T["project_members"]["Row"];
+export type Section = T["sections"]["Row"];
+export type MyTaskSection = T["my_task_sections"]["Row"];
 export type Task = T["tasks"]["Row"];
 export type TaskInsert = T["tasks"]["Insert"];
 export type TaskUpdate = T["tasks"]["Update"];
 export type Comment = T["comments"]["Row"];
 export type Attachment = T["attachments"]["Row"];
+export type WorkspaceInvitation = T["workspace_invitations"]["Row"];
+export type Notification = T["notifications"]["Row"];
+export type NotificationType = Notification["type"];

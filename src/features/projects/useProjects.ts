@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { supabase } from "@/lib/supabase";
 import type { Project } from "@/types/database";
 
@@ -9,7 +10,7 @@ const projectsKey = (workspaceId: string | undefined) => ["projects", workspaceI
 // Reads -----------------------------------------------------------------
 
 export function useProjects(workspaceId: string | undefined) {
-  return useQuery({
+  const result = useQuery({
     queryKey: projectsKey(workspaceId),
     queryFn: async (): Promise<Project[]> => {
       if (!workspaceId) return [];
@@ -22,6 +23,35 @@ export function useProjects(workspaceId: string | undefined) {
       return data;
     },
     enabled: !!workspaceId,
+  });
+
+  useRealtimeInvalidate({
+    table: "projects",
+    filter: workspaceId ? `workspace_id=eq.${workspaceId}` : undefined,
+    queryKey: projectsKey(workspaceId),
+    enabled: !!workspaceId,
+  });
+
+  return result;
+}
+
+// Single-project fetch — used by surfaces (like the inbox) that need to
+// resolve a project's workspace from a task's project_id without knowing
+// which workspace ahead of time.
+export function useProject(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["project", projectId],
+    queryFn: async (): Promise<Project | null> => {
+      if (!projectId) return null;
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("id", projectId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId,
   });
 }
 

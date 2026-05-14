@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useAuth } from "@/features/auth/AuthProvider";
+import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { supabase } from "@/lib/supabase";
 import type { Attachment } from "@/types/database";
 
@@ -11,7 +12,7 @@ const attachmentsKey = (taskId: string | undefined) => ["attachments", taskId] a
 export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024; // 50 MB
 
 export function useAttachments(taskId: string | undefined) {
-  return useQuery({
+  const result = useQuery({
     queryKey: attachmentsKey(taskId),
     queryFn: async (): Promise<Attachment[]> => {
       if (!taskId) return [];
@@ -25,6 +26,15 @@ export function useAttachments(taskId: string | undefined) {
     },
     enabled: !!taskId,
   });
+
+  useRealtimeInvalidate({
+    table: "attachments",
+    filter: taskId ? `task_id=eq.${taskId}` : undefined,
+    queryKey: attachmentsKey(taskId),
+    enabled: !!taskId,
+  });
+
+  return result;
 }
 
 export function useUploadAttachment(taskId: string | undefined) {
@@ -104,6 +114,44 @@ export function useDeleteAttachment(taskId: string | undefined) {
         qc.setQueryData(attachmentsKey(taskId), context.previous);
       }
       toast.error("Failed to delete attachment");
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: attachmentsKey(taskId) });
+    },
+  });
+}
+
+/**
+ * Bulk-delete every attachment on a task. RLS gates this to the uploader
+ * (per row) OR the task creator (any row on their task) — see migration
+ * 0012. Optimistically clears the cache; refetch on settle.
+ */
+export function useDeleteAllAttachments(taskId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (current: Attachment[]): Promise<void> => {
+      if (!taskId || current.length === 0) return;
+      const { error } = await supabase
+        .from("attachments")
+        .delete()
+        .eq("task_id", taskId);
+      if (error) throw error;
+      const paths = current.map((a) => a.storage_path);
+      // Best-effort storage cleanup; orphans here would still be hidden
+      // from any UI because the DB rows are gone.
+      await supabase.storage.from(ATTACHMENTS_BUCKET).remove(paths);
+    },
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: attachmentsKey(taskId) });
+      const previous = qc.getQueryData<Attachment[]>(attachmentsKey(taskId));
+      qc.setQueryData<Attachment[]>(attachmentsKey(taskId), []);
+      return { previous };
+    },
+    onError: (_err, _v, context) => {
+      if (context?.previous) {
+        qc.setQueryData(attachmentsKey(taskId), context.previous);
+      }
+      toast.error("Failed to delete attachments");
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: attachmentsKey(taskId) });

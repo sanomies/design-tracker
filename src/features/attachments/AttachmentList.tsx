@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Download,
   Loader2,
+  MoreHorizontal,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -26,13 +27,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/features/auth/AuthProvider";
 import { cn } from "@/lib/utils";
-import type { Attachment } from "@/types/database";
+import type { Attachment, Task } from "@/types/database";
 
 import { AttachmentLightbox } from "./AttachmentLightbox";
 import {
   FileTypeIcon,
   downloadAttachment,
+  downloadAttachmentsAsZip,
   extensionLabel,
   isImageAttachment,
 } from "./shared";
@@ -40,21 +43,30 @@ import {
   getSignedAttachmentUrl,
   MAX_ATTACHMENT_BYTES,
   useAttachments,
+  useDeleteAllAttachments,
   useDeleteAttachment,
   useUploadAttachment,
 } from "./useAttachments";
 
-const TILE_W = 140;
-const TILE_H = 100;
+const TILE_W = 100;
+const TILE_H = 60;
 
-export function AttachmentList({ taskId }: { taskId: string }) {
+export function AttachmentList({ task }: { task: Task }) {
+  const taskId = task.id;
+  const { user } = useAuth();
   const { data: attachments, isLoading } = useAttachments(taskId);
   const upload = useUploadAttachment(taskId);
   const remove = useDeleteAttachment(taskId);
+  const removeAll = useDeleteAllAttachments(taskId);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingDelete, setPendingDelete] = useState<Attachment | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [lightboxId, setLightboxId] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  const isTaskCreator = !!user && task.created_by === user.id;
+  const hasAttachments = (attachments?.length ?? 0) > 0;
 
   const onPickFiles = () => fileInputRef.current?.click();
 
@@ -74,6 +86,29 @@ export function AttachmentList({ taskId }: { taskId: string }) {
     if (!pendingDelete) return;
     remove.mutate(pendingDelete);
     setPendingDelete(null);
+  };
+
+  // Single file → direct download (preserves original filename + browser's
+  // "save as" flow). Multiple → zip them in-browser so the user gets one
+  // file with everything inside.
+  const downloadAll = async () => {
+    if (!attachments || attachments.length === 0) return;
+    if (attachments.length === 1) {
+      await downloadAttachment(attachments[0]!);
+      return;
+    }
+    const zipName = `${zipFileName(task.title)}.zip`;
+    await toast.promise(downloadAttachmentsAsZip(attachments, zipName), {
+      loading: `Packaging ${attachments.length} files…`,
+      success: "Download ready",
+      error: "Failed to build the zip",
+    });
+  };
+
+  const onConfirmDeleteAll = () => {
+    if (!attachments) return;
+    removeAll.mutate(attachments);
+    setConfirmDeleteAll(false);
   };
 
   const count = attachments?.length ?? 0;
@@ -103,6 +138,35 @@ export function AttachmentList({ taskId }: { taskId: string }) {
             <Plus className="h-3.5 w-3.5" />
           )}
         </Button>
+        {hasAttachments && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                aria-label="More attachment actions"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => void downloadAll()}>
+                <Download className="mr-2 h-3.5 w-3.5" />
+                Download all attachments
+              </DropdownMenuItem>
+              {isTaskCreator && (
+                <DropdownMenuItem
+                  onSelect={() => setConfirmDeleteAll(true)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete all attachments
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -118,7 +182,31 @@ export function AttachmentList({ taskId }: { taskId: string }) {
           <Skeleton style={{ width: TILE_W, height: TILE_H }} className="rounded-md" />
         </div>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <div
+          className={cn(
+            "relative flex flex-wrap gap-2 rounded-md transition-colors",
+            isDraggingOver && "ring-2 ring-primary/60 bg-primary/5"
+          )}
+          onDragEnter={(e) => {
+            if (!hasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            setIsDraggingOver(true);
+          }}
+          onDragOver={(e) => {
+            if (!hasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+          }}
+          onDragLeave={(e) => {
+            if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+            setIsDraggingOver(false);
+          }}
+          onDrop={(e) => {
+            if (!hasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            setIsDraggingOver(false);
+            onFilesChosen(e.dataTransfer.files);
+          }}
+        >
           {attachments?.map((a) => (
             <AttachmentTile
               key={a.id}
@@ -128,6 +216,11 @@ export function AttachmentList({ taskId }: { taskId: string }) {
             />
           ))}
           <AddTile onClick={onPickFiles} disabled={upload.isPending} pending={upload.isPending} />
+          {isDraggingOver && (
+            <div className="pointer-events-none absolute inset-0 rounded-md flex items-center justify-center text-xs font-medium text-primary">
+              Drop files to upload
+            </div>
+          )}
         </div>
       )}
 
@@ -154,6 +247,27 @@ export function AttachmentList({ taskId }: { taskId: string }) {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={confirmDeleteAll} onOpenChange={setConfirmDeleteAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete all attachments?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {count} attachment{count === 1 ? "" : "s"} will be removed
+              permanently. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onConfirmDeleteAll}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete all
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {lightboxId && attachments && attachments.length > 0 && (
         <AttachmentLightbox
           attachments={attachments}
@@ -164,6 +278,29 @@ export function AttachmentList({ taskId }: { taskId: string }) {
       )}
     </div>
   );
+}
+
+// True when the drag carries at least one file. We can't read `.files`
+// during dragenter/dragover (it's only populated on drop) so we sniff
+// `items` instead.
+function hasFiles(dt: DataTransfer | null): boolean {
+  if (!dt) return false;
+  if (dt.items && dt.items.length > 0) {
+    return Array.from(dt.items).some((item) => item.kind === "file");
+  }
+  return (dt.files?.length ?? 0) > 0;
+}
+
+// Strip filesystem-unfriendly characters from the task title so the
+// resulting "<task>.zip" works across OSes. Falls back if the title is
+// all-symbols.
+function zipFileName(title: string): string {
+  const cleaned = title
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+  return cleaned.length > 0 ? `${cleaned} — attachments` : "attachments";
 }
 
 function AttachmentTile({
@@ -213,7 +350,7 @@ function AttachmentTile({
             <img
               src={thumbUrl}
               alt=""
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
               onError={() => setThumbFailed(true)}
               draggable={false}
             />

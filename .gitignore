@@ -38,3 +38,6 @@ pnpm-debug.log*
 
 # claude code local settings
 .claude/
+
+# supabase CLI local cache (project ref, version files, etc.)
+supabase/.temp/

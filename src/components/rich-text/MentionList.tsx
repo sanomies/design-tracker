@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { avatarColor } from "@/lib/avatarColor";
 import { cn } from "@/lib/utils";
 
 export type MentionItem = { id: string; label: string };
@@ -71,7 +72,9 @@ export const MentionList = forwardRef<MentionListHandle, Props>(({ items, comman
           )}
         >
           <Avatar className="h-5 w-5">
-            <AvatarFallback className="text-[10px]">{initials(item.label)}</AvatarFallback>
+            <AvatarFallback className={cn("text-[10px]", avatarColor(item.id))}>
+              {initials(item.label)}
+            </AvatarFallback>
           </Avatar>
           <span className="truncate">{item.label}</span>
         </button>

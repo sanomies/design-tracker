@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { EditorContent, ReactRenderer, useEditor, type Editor } from "@tiptap/react";
 import type { Range } from "@tiptap/core";
+import { toast } from "sonner";
 import StarterKit from "@tiptap/starter-kit";
 import Mention from "@tiptap/extension-mention";
 import Underline from "@tiptap/extension-underline";
@@ -72,6 +73,13 @@ type Props = {
   className?: string;
   autoFocus?: boolean;
   minHeight?: string;
+  /** When provided, the Image action picks a file (instead of asking for a
+   *  URL), and pasted/dropped image files are uploaded automatically. The
+   *  callback returns the URL to embed in the editor's `<img src>`. */
+  onUploadImage?: (file: File) => Promise<string>;
+  /** When provided, non-image files pasted or dropped into the editor are
+   *  uploaded via this callback and inserted as clickable links inline. */
+  onUploadFile?: (file: File) => Promise<string>;
 };
 
 const EMPTY_HTML = ["", "<p></p>", "<p><br></p>"];
@@ -335,6 +343,8 @@ export function RichTextEditor({
   className,
   autoFocus,
   minHeight = "80px",
+  onUploadImage,
+  onUploadFile,
 }: Props) {
   // Toolbar visibility = editor focused OR any sub-UI open. Tracking each
   // popover/dropdown lets the toolbar stay visible while the user interacts
@@ -345,6 +355,8 @@ export function RichTextEditor({
   const [imageOpen, setImageOpen] = useState(false);
   const [embedOpen, setEmbedOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
 
   const showToolbar =
     editorFocused || insertOpen || linkOpen || imageOpen || embedOpen || emojiOpen;
@@ -355,6 +367,130 @@ export function RichTextEditor({
   useEffect(() => {
     membersRef.current = members;
   }, [members]);
+
+  // Latest uploader through a ref for the same reason mentions does it: the
+  // ProseMirror handlePaste/handleDrop closures are captured at mount.
+  const uploadRef = useRef(onUploadImage);
+  useEffect(() => {
+    uploadRef.current = onUploadImage;
+  }, [onUploadImage]);
+
+  const fileUploadRef = useRef(onUploadFile);
+  useEffect(() => {
+    fileUploadRef.current = onUploadFile;
+  }, [onUploadFile]);
+
+  // Editor is created below; we keep a ref so the file picker change handler
+  // (declared outside the useEditor call) can reach it.
+  const editorRef = useRef<Editor | null>(null);
+
+  /**
+   * Routes a batch of pasted/dropped files. Images go to `onUploadImage`,
+   * everything else to `onUploadFile`. Both run in parallel; once all
+   * uploads settle we insert every successful one into the editor in a
+   * SINGLE ProseMirror transaction (images as inline `<img>` nodes,
+   * non-images as paragraph-wrapped clickable links). Doing it in one
+   * transaction avoids the chained-command races that previously caused
+   * only the first image to land.
+   */
+  const routeFiles = (files: File[]) => {
+    const imageUploader = uploadRef.current;
+    const fileUploader = fileUploadRef.current;
+
+    const images: File[] = [];
+    const others: File[] = [];
+    files.forEach((file) => {
+      if (isImage(file) && imageUploader) images.push(file);
+      else if (fileUploader) others.push(file);
+    });
+
+    if (images.length === 0 && others.length === 0) return;
+
+    void (async () => {
+      const [imageResults, fileResults] = await Promise.all([
+        images.length > 0 && imageUploader
+          ? Promise.allSettled(
+              images.map((file) =>
+                toast
+                  .promise(imageUploader(file), {
+                    loading: `Uploading ${file.name}…`,
+                    success: `${file.name} uploaded`,
+                    error: (e: unknown) =>
+                      e instanceof Error
+                        ? e.message
+                        : `Failed to upload ${file.name}`,
+                  })
+                  .unwrap()
+              )
+            )
+          : Promise.resolve([] as PromiseSettledResult<string>[]),
+        others.length > 0 && fileUploader
+          ? Promise.allSettled(
+              others.map((file) =>
+                toast
+                  .promise(fileUploader(file), {
+                    loading: `Uploading ${file.name}…`,
+                    success: `${file.name} uploaded`,
+                    error: (e: unknown) =>
+                      e instanceof Error
+                        ? e.message
+                        : `Failed to upload ${file.name}`,
+                  })
+                  .unwrap()
+              )
+            )
+          : Promise.resolve([] as PromiseSettledResult<string>[]),
+      ]);
+
+      const imageUrls = imageResults
+        .filter(
+          (r): r is PromiseFulfilledResult<string> => r.status === "fulfilled"
+        )
+        .map((r) => r.value);
+      const fileLinks: { url: string; name: string }[] = [];
+      fileResults.forEach((r, i) => {
+        if (r.status === "fulfilled") {
+          fileLinks.push({ url: r.value, name: others[i]!.name });
+        }
+      });
+
+      if (imageUrls.length === 0 && fileLinks.length === 0) return;
+
+      const editor = editorRef.current;
+      if (!editor) return;
+
+      // Build one mixed content array: image nodes (inline) followed by
+      // paragraph-wrapped links (block). insertContent handles the mix —
+      // images stay in the current paragraph, links each start a new line.
+      const content: Record<string, unknown>[] = [
+        ...imageUrls.map((url) => ({
+          type: "image",
+          attrs: { src: url },
+        })),
+        ...fileLinks.map(({ url, name }) => ({
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: name,
+              marks: [
+                {
+                  type: "link",
+                  attrs: {
+                    href: url,
+                    target: "_blank",
+                    rel: "noopener noreferrer",
+                  },
+                },
+              ],
+            },
+          ],
+        })),
+      ];
+
+      editor.chain().focus().insertContent(content).run();
+    })();
+  };
 
   const editor = useEditor({
     extensions: [
@@ -391,7 +527,7 @@ export function RichTextEditor({
       }),
       SlashCommand.configure({
         suggestion: buildSlashSuggestion({
-          onOpenImage: () => setImageOpen(true),
+          onOpenImage: () => triggerImagePickerOrDialog(),
           onOpenEmbed: () => setEmbedOpen(true),
           onOpenEmoji: () => setEmojiOpen(true),
         }),
@@ -405,6 +541,63 @@ export function RichTextEditor({
         "data-placeholder": placeholder ?? "",
         style: `min-height: ${minHeight}`,
       },
+      handlePaste: (_view, event) => {
+        const hasUploader = !!uploadRef.current;
+        const hasFileUploader = !!fileUploadRef.current;
+        if (!hasUploader && !hasFileUploader) return false;
+
+        const syncFiles = extractAllFiles(event.clipboardData);
+        if (syncFiles.length === 0) return false;
+        event.preventDefault();
+
+        // Insert sync files immediately. Images go inline; everything else
+        // is uploaded and linked inline as well.
+        routeFiles(syncFiles);
+
+        // Async fallback for browsers that expose more via clipboard.read().
+        void (async () => {
+          try {
+            const asyncFiles = await readClipboardImages();
+            if (asyncFiles.length > syncFiles.length) {
+              routeFiles(asyncFiles.slice(syncFiles.length));
+            }
+          } catch {
+            // ignore — we already routed syncFiles
+          }
+        })();
+
+        // Surface the macOS Chrome paste limitation when we can detect it:
+        // text/uri-list exposes the FULL list of copied paths even when
+        // .files was truncated. We can't fetch file:// URIs from a webpage,
+        // so the only honest thing to do is tell the user.
+        const uriCount = uriListFileCount(event.clipboardData);
+        if (uriCount > syncFiles.length) {
+          toast.info(
+            `Your browser only let us paste ${syncFiles.length} of ${uriCount} files. Drag from Finder to add the rest.`
+          );
+        }
+        return true;
+      },
+      handleDrop: (_view, event) => {
+        // File drops are handled by the wrapper's React onDrop below — it's
+        // a more deterministic path that doesn't depend on ProseMirror's
+        // internal drop processing. We still claim the drop here (return
+        // true) for file drops so ProseMirror skips its own default
+        // (which would insert blob-URL <img> tags we don't control).
+        const dt = event.dataTransfer;
+        const hasFiles =
+          (dt?.files?.length ?? 0) > 0 ||
+          Array.from(dt?.items ?? []).some((i) => i.kind === "file");
+        if (!hasFiles) return false;
+        const hasUploader = !!uploadRef.current;
+        const hasFileUploader = !!fileUploadRef.current;
+        if (!hasUploader && !hasFileUploader) return false;
+        // Don't process here — the wrapper handler does. Just suppress
+        // ProseMirror's default. preventDefault on the event also stops
+        // the browser from navigating to the file.
+        event.preventDefault();
+        return true;
+      },
     },
     onUpdate: ({ editor }) => onChange?.(editor.getHTML()),
     onFocus: () => setEditorFocused(true),
@@ -413,6 +606,16 @@ export function RichTextEditor({
       onBlur?.(editor.getHTML());
     },
   });
+
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
+  // Image button → file picker when uploader is configured, else URL dialog.
+  const triggerImagePickerOrDialog = () => {
+    if (uploadRef.current) imageFileInputRef.current?.click();
+    else setImageOpen(true);
+  };
 
   // Keep editor content in sync if the parent value changes externally.
   useEffect(() => {
@@ -425,14 +628,56 @@ export function RichTextEditor({
 
   if (!editor) return null;
 
+  const hasUploader = !!onUploadImage;
+  const acceptsAnyFile = hasUploader || !!onUploadFile;
+
   return (
     <div
       className={cn(
-        "rounded-md border bg-background transition-colors",
+        "relative rounded-md border bg-background transition-colors",
         showToolbar ? "ring-1 ring-ring/40" : "",
+        isDraggingOver && "ring-2 ring-primary/60",
         className
       )}
+      onDragEnter={(e) => {
+        if (!acceptsAnyFile) return;
+        if (!hasAnyFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        setIsDraggingOver(true);
+      }}
+      onDragOver={(e) => {
+        if (!acceptsAnyFile) return;
+        if (!hasAnyFiles(e.dataTransfer)) return;
+        e.preventDefault();
+      }}
+      onDragLeave={(e) => {
+        // Only clear when leaving the wrapper itself, not when entering a child.
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        setIsDraggingOver(false);
+      }}
+      onDrop={(e) => {
+        setIsDraggingOver(false);
+        if (!acceptsAnyFile) return;
+        const files = extractAllFiles(e.dataTransfer);
+        if (files.length === 0) return;
+        e.preventDefault();
+        routeFiles(files);
+      }}
     >
+      {hasUploader && (
+        <input
+          ref={imageFileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) routeFiles(files);
+            if (imageFileInputRef.current) imageFileInputRef.current.value = "";
+          }}
+        />
+      )}
       <EditorContent editor={editor} className="px-3 py-2" />
       {/* Toolbar stays mounted so it can transition in both directions.
           Wrapper handles the open/close animation; the toolbar itself owns
@@ -458,10 +703,93 @@ export function RichTextEditor({
           setEmbedOpen={setEmbedOpen}
           emojiOpen={emojiOpen}
           setEmojiOpen={setEmojiOpen}
+          onTriggerImage={triggerImagePickerOrDialog}
         />
       </div>
+
+      {isDraggingOver && (
+        <div className="pointer-events-none absolute inset-0 rounded-md bg-primary/5 border-2 border-dashed border-primary/40 flex items-center justify-center text-xs font-medium text-primary">
+          Drop files to upload
+        </div>
+      )}
     </div>
   );
+}
+
+function hasAnyFiles(dt: DataTransfer | null): boolean {
+  if (!dt) return false;
+  // `files` is only populated on drop, not dragenter/dragover. Use `items`
+  // during the drag and fall back to `files` once we have them.
+  if (dt.items && dt.items.length > 0) {
+    return Array.from(dt.items).some((item) => item.kind === "file");
+  }
+  return (dt.files?.length ?? 0) > 0;
+}
+
+/**
+ * Pull every file out of a clipboard or drag DataTransfer (any MIME type).
+ * Reads both `dt.files` and `dt.items` and returns whichever list has more
+ * entries — on macOS Chrome multi-file paste, one of the two is usually
+ * truncated but the other is complete.
+ */
+function extractAllFiles(dt: DataTransfer | null): File[] {
+  if (!dt) return [];
+  const fromFiles = Array.from(dt.files ?? []);
+  const fromItems: File[] = [];
+  Array.from(dt.items ?? []).forEach((item) => {
+    if (item.kind !== "file") return;
+    const f = item.getAsFile();
+    if (f) fromItems.push(f);
+  });
+  return fromItems.length > fromFiles.length ? fromItems : fromFiles;
+}
+
+function isImage(f: File): boolean {
+  return f.type.startsWith("image/");
+}
+
+/**
+ * Returns the count of file URIs present in the clipboard's text/uri-list,
+ * which macOS Chrome populates with the FULL list of copied files even when
+ * `clipboardData.files` is truncated to one. We use this purely to detect
+ * the truncation and surface a hint to the user — we can't fetch local
+ * file:// URIs from a webpage.
+ */
+function uriListFileCount(dt: DataTransfer | null): number {
+  if (!dt) return 0;
+  const list = dt.getData("text/uri-list") ?? "";
+  if (!list) return 0;
+  return list
+    .split(/\r?\n/)
+    .filter((line) => line.trim() && !line.startsWith("#"))
+    .length;
+}
+
+/**
+ * Async fallback that uses the modern Clipboard API. Some browsers surface
+ * additional clipboard items here that aren't visible in the ClipboardEvent
+ * synchronously — notably multi-file paste from Finder on macOS Chrome.
+ * Throws if the API isn't available or the read is denied.
+ */
+async function readClipboardImages(): Promise<File[]> {
+  if (!navigator.clipboard?.read) throw new Error("Clipboard API not available");
+  const items = await navigator.clipboard.read();
+  const files: File[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]!;
+    for (const type of item.types) {
+      if (!type.startsWith("image/")) continue;
+      const blob = await item.getType(type);
+      const ext = (type.split("/")[1] ?? "png").split("+")[0]; // svg+xml → svg
+      files.push(
+        new File([blob], `pasted-${i + 1}.${ext}`, {
+          type,
+          lastModified: Date.now(),
+        })
+      );
+    }
+  }
+  return files;
 }
 
 // Toolbar ---------------------------------------------------------------
@@ -478,6 +806,7 @@ type ToolbarProps = {
   setEmbedOpen: (v: boolean) => void;
   emojiOpen: boolean;
   setEmojiOpen: (v: boolean) => void;
+  onTriggerImage: () => void;
 };
 
 function Toolbar({
@@ -492,6 +821,7 @@ function Toolbar({
   setEmbedOpen,
   emojiOpen,
   setEmojiOpen,
+  onTriggerImage,
 }: ToolbarProps) {
   return (
     <div
@@ -500,13 +830,13 @@ function Toolbar({
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) e.preventDefault();
       }}
-      className="flex items-center gap-0.5 px-1 py-1 border-t bg-muted/30 flex-wrap"
+      className="flex items-center gap-0.5 px-1 py-1 border-t bg-[#F5F7FA] flex-wrap"
     >
       <InsertMenu
         editor={editor}
         open={insertOpen}
         onOpenChange={setInsertOpen}
-        onOpenImage={() => setImageOpen(true)}
+        onOpenImage={onTriggerImage}
         onOpenEmoji={() => setEmojiOpen(true)}
         onOpenEmbed={() => setEmbedOpen(true)}
       />
