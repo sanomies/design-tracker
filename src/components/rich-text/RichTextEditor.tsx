@@ -685,7 +685,7 @@ export function RichTextEditor({
       <div
         aria-hidden={!showToolbar}
         className={cn(
-          "overflow-hidden transition-[max-height,opacity,transform] duration-200 ease-out",
+          "sticky bottom-0 z-10 overflow-hidden transition-[max-height,opacity,transform] duration-200 ease-out",
           showToolbar
             ? "max-h-[160px] opacity-100 translate-y-0"
             : "max-h-0 opacity-0 -translate-y-1 pointer-events-none"
