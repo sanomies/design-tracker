@@ -44,6 +44,9 @@ import { ChevronRight, GripVertical } from "lucide-react";
 
 import { TaskListHeader } from "./TaskListHeader";
 import { defaultFilters, matchesFilters, type Filters } from "./taskFilters";
+import { type SortState } from "./taskColumns";
+import { buildSortComparator } from "./taskSort";
+import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
 import { SortableTaskRow } from "@/features/tasks/SortableTaskRow";
 import {
   useCreateSection,
@@ -103,6 +106,12 @@ export function TaskList({
   // assignee hides everything they didn't touch, completed or not).
   const [filters, setFilters] = useState<Filters>(defaultFilters);
 
+  // Column sort. null = no sort, fall back to manual position. Sort is
+  // applied within each section, not across them, so sections still feel
+  // like distinct groups.
+  const [sort, setSort] = useState<SortState>(null);
+  const { data: members = [] } = useWorkspaceMembers(workspaceId);
+
   // Split into open (todo / in_progress) and done — filtered.
   const { openTasks, doneTasks } = useMemo(() => {
     const open: Task[] = [];
@@ -123,8 +132,9 @@ export function TaskList({
   );
 
   // Group open tasks by section_id. Un-sectioned ones float to the top.
-  // Sorting by position inside each group means optimistic cache updates
-  // (which append, not insert) still render in the right order after a drag.
+  // Default ordering is by `position` so optimistic cache updates (which
+  // append, not insert) still land in the right slot after a drag. When
+  // a column sort is active it overrides position within each group.
   const { unsectioned, bySection } = useMemo(() => {
     const us: Task[] = [];
     const by = new Map<string, Task[]>();
@@ -137,10 +147,12 @@ export function TaskList({
         us.push(t);
       }
     }
-    us.sort((a, b) => a.position - b.position);
-    for (const arr of by.values()) arr.sort((a, b) => a.position - b.position);
+    const sortCmp = buildSortComparator(sort, members);
+    const finalCmp = sortCmp ?? ((a: Task, b: Task) => a.position - b.position);
+    us.sort(finalCmp);
+    for (const arr of by.values()) arr.sort(finalCmp);
     return { unsectioned: us, bySection: by };
-  }, [openTasks]);
+  }, [openTasks, sort, members]);
 
   // Sort
   const [doneSort, setDoneSort] = useState<DoneSort>(() => {
@@ -505,6 +517,8 @@ export function TaskList({
             workspaceId={workspaceId}
             filters={filters}
             onChange={setFilters}
+            sort={sort}
+            onSortChange={setSort}
           />
           <DndContext
             sensors={sensors}

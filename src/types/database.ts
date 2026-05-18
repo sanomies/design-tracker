@@ -178,6 +178,7 @@ export type Database = {
           completed_at: string | null;
           my_section_id: string | null;
           my_position: number | null;
+          publication: string | null;
         };
         Insert: {
           id?: string;
@@ -196,6 +197,7 @@ export type Database = {
           completed_at?: string | null;
           my_section_id?: string | null;
           my_position?: number | null;
+          publication?: string | null;
         };
         Update: {
           id?: string;
@@ -214,6 +216,7 @@ export type Database = {
           completed_at?: string | null;
           my_section_id?: string | null;
           my_position?: number | null;
+          publication?: string | null;
         };
       };
       comments: {

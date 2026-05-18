@@ -94,6 +94,9 @@ export function useCreateTask(projectId: string | undefined) {
         created_at: new Date().toISOString(),
         created_by: user?.id ?? null,
         completed_at: null,
+        my_section_id: null,
+        my_position: null,
+        publication: null,
       };
       qc.setQueryData<Task[]>(tasksKey(projectId), (old = []) => [...old, optimistic]);
       return { previous };

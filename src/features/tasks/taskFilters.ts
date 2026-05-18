@@ -9,21 +9,6 @@ import {
 
 import type { Task, TaskPriority } from "@/types/database";
 
-/**
- * Tailwind width classes used by both the column header row and TaskRow's
- * right-side cells. Keeping them here means changing a width changes both
- * places in lockstep. Sized tight so the metadata reads as one grouped
- * strip instead of spread-out columns.
- */
-export const COLUMN_WIDTHS = {
-  // Assignee and Created by show "avatar + full name (truncated)" — width
-  // fits the avatar plus ~8 chars before truncation kicks in.
-  assignee: "w-28",
-  due: "w-16",
-  createdBy: "w-28",
-  priority: "w-16",
-} as const;
-
 export type DueDatePreset = "all" | "overdue" | "today" | "this-week" | "none";
 
 export type Filters = {
@@ -33,6 +18,8 @@ export type Filters = {
   createdBy: Set<string> | null;
   /** null = no filter. "none" in the set = tasks with no priority. */
   priority: Set<TaskPriority | "none"> | null;
+  /** null = no filter. Strings are publication slugs; null in the set = no publication. */
+  publication: Set<string | null> | null;
   /** "all" = no filter. */
   dueDate: DueDatePreset;
 };
@@ -41,6 +28,7 @@ export const defaultFilters: Filters = {
   assignee: null,
   createdBy: null,
   priority: null,
+  publication: null,
   dueDate: "all",
 };
 
@@ -49,6 +37,7 @@ export function hasActiveFilter(f: Filters): boolean {
     f.assignee !== null ||
     f.createdBy !== null ||
     f.priority !== null ||
+    f.publication !== null ||
     f.dueDate !== "all"
   );
 }
@@ -62,6 +51,7 @@ export function matchesFilters(t: Task, f: Filters): boolean {
     const key: TaskPriority | "none" = t.priority ?? "none";
     if (!f.priority.has(key)) return false;
   }
+  if (f.publication && !f.publication.has(t.publication ?? null)) return false;
   if (f.dueDate !== "all") {
     const due = t.due_date ? parseISO(t.due_date) : null;
     if (f.dueDate === "none") {

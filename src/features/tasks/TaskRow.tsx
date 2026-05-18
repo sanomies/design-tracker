@@ -15,7 +15,14 @@ import type { Task } from "@/types/database";
 import { AssigneePickerContent } from "./AssigneePicker";
 import { DueDatePickerContent } from "./DueDatePicker";
 import { priorityMeta } from "./priority";
-import { COLUMN_WIDTHS } from "./taskFilters";
+import { PublicationPickerContent } from "./PublicationPicker";
+import { getPublication } from "./publications";
+import {
+  effectiveColumnWidth,
+  useColumnOrder,
+  useColumnWidths,
+  type ColumnId,
+} from "./taskColumns";
 import { useUpdateTask } from "./useTasks";
 
 function initials(name: string | null | undefined, fallback = "?"): string {
@@ -60,7 +67,10 @@ export function TaskRow({
   const creator = members?.find((m) => m.id === task.created_by);
   const priority = priorityMeta(task.priority);
   const due = task.due_date ? formatDueDate(task.due_date) : null;
+  const publication = getPublication(task.publication);
   const done = task.status === "done";
+  const order = useColumnOrder();
+  const widths = useColumnWidths();
 
   const toggleDone = () => {
     if (done) {
@@ -84,68 +94,71 @@ export function TaskRow({
   // open the task detail panel).
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [dueOpen, setDueOpen] = useState(false);
+  const [publicationOpen, setPublicationOpen] = useState(false);
 
   const stopRowClick = (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
   };
 
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-      className={cn(
-        "group flex items-center gap-3 px-3 py-2 border-b cursor-pointer transition-colors",
-        selected ? "bg-accent" : "hover:bg-muted/50"
-      )}
-    >
-      <Checkbox
-        checked={done}
-        onCheckedChange={toggleDone}
-        onClick={(e) => e.stopPropagation()}
-        aria-label={done ? "Mark incomplete" : "Mark complete"}
-        className="border-muted-foreground/40 hover:border-emerald-500 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500 data-[state=checked]:text-white transition-colors"
-      />
+  // Cell content keyed by column id. Wrapped in a fixed-width, padded
+  // container by the strip below so dividers (via `divide-x`) line up.
+  const renderCell = (id: ColumnId) => {
+    switch (id) {
+      case "publication":
+        return (
+          <Popover open={publicationOpen} onOpenChange={setPublicationOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                onClick={stopRowClick}
+                onKeyDown={stopRowClick}
+                className="w-full flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-accent text-left transition-colors"
+                aria-label={
+                  publication
+                    ? `Change publication (${publication.name})`
+                    : "Set publication"
+                }
+                title={publication?.name}
+              >
+                {publication ? (
+                  <>
+                    <img
+                      src={publication.thumbnail}
+                      alt=""
+                      className="h-5 w-5 rounded object-cover shrink-0"
+                    />
+                    <span className="text-xs truncate">{publication.name}</span>
+                  </>
+                ) : (
+                  <EmptyCell />
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="p-1 w-64 max-h-80 overflow-y-auto"
+              onClick={stopRowClick}
+            >
+              <PublicationPickerContent
+                value={task.publication}
+                onChange={(publication) =>
+                  updateTask.mutate({ id: task.id, patch: { publication } })
+                }
+                onClose={() => setPublicationOpen(false)}
+              />
+            </PopoverContent>
+          </Popover>
+        );
 
-      {/* Name cell: title + subtask count badge */}
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        <span
-          className={cn(
-            "text-sm truncate",
-            done && "line-through text-muted-foreground"
-          )}
-        >
-          {task.title}
-        </span>
-        {subtaskTotal > 0 && (
-          <span
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0"
-            title={`${subtaskDone} of ${subtaskTotal} subtasks complete`}
-          >
-            <ListChecks className="h-3.5 w-3.5" />
-            {subtaskDone}/{subtaskTotal}
-          </span>
-        )}
-      </div>
-
-      {/* Metadata cells grouped tightly so they read as one strip; widths
-          are matched by the header's matching sub-flex. */}
-      <div className="shrink-0 flex items-center gap-1.5">
-        {/* Assignee */}
-        <div className={cn("shrink-0", COLUMN_WIDTHS.assignee)}>
+      case "assignee":
+        return (
           <Popover open={assigneeOpen} onOpenChange={setAssigneeOpen}>
             <PopoverTrigger asChild>
               <button
                 type="button"
                 onClick={stopRowClick}
                 onKeyDown={stopRowClick}
-                className="w-full flex items-center gap-1.5 rounded-md px-1 -mx-1 py-0.5 hover:bg-accent text-left transition-colors"
+                className="w-full flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-accent text-left transition-colors"
                 aria-label={
                   assignee
                     ? `Change assignee (${assignee.full_name ?? "Unnamed"})`
@@ -184,17 +197,17 @@ export function TaskRow({
               />
             </PopoverContent>
           </Popover>
-        </div>
+        );
 
-        {/* Due date */}
-        <div className={cn("shrink-0", COLUMN_WIDTHS.due)}>
+      case "due":
+        return (
           <Popover open={dueOpen} onOpenChange={setDueOpen}>
             <PopoverTrigger asChild>
               <button
                 type="button"
                 onClick={stopRowClick}
                 onKeyDown={stopRowClick}
-                className="w-full flex items-center text-xs whitespace-nowrap rounded-md px-1 -mx-1 py-0.5 hover:bg-accent text-left transition-colors"
+                className="w-full flex items-center text-xs whitespace-nowrap rounded px-1 py-0.5 hover:bg-accent text-left transition-colors"
                 aria-label={due ? `Change due date (${due.label})` : "Set due date"}
               >
                 {due ? (
@@ -227,44 +240,97 @@ export function TaskRow({
               />
             </PopoverContent>
           </Popover>
-        </div>
+        );
 
-        {/* Created by */}
-        <div
+      case "createdBy":
+        return creator ? (
+          <div className="w-full flex items-center gap-1.5">
+            <Avatar className="h-6 w-6 shrink-0" title={creator.full_name ?? undefined}>
+              <AvatarFallback className={cn("text-[10px]", avatarColor(creator.id))}>
+                {initials(creator.full_name)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-xs truncate">
+              {creator.full_name ?? "Unnamed"}
+            </span>
+          </div>
+        ) : (
+          <EmptyCell />
+        );
+
+      case "priority":
+        return priority ? (
+          <Badge
+            variant="outline"
+            className={cn("h-5 text-[10px] uppercase", priority.className)}
+          >
+            {priority.label}
+          </Badge>
+        ) : (
+          <EmptyCell />
+        );
+    }
+  };
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className={cn(
+        "group flex items-stretch gap-3 px-3 py-2 border-b cursor-pointer transition-colors",
+        selected ? "bg-accent" : "hover:bg-muted/50"
+      )}
+    >
+      <Checkbox
+        checked={done}
+        onCheckedChange={toggleDone}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={done ? "Mark incomplete" : "Mark complete"}
+        className="self-center border-muted-foreground/40 hover:border-emerald-500 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500 data-[state=checked]:text-white transition-colors"
+      />
+
+      {/* Name cell: title + subtask count badge */}
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <span
           className={cn(
-            "shrink-0 flex items-center gap-1.5",
-            COLUMN_WIDTHS.createdBy
+            "text-sm truncate",
+            done && "line-through text-muted-foreground"
           )}
         >
-          {creator ? (
-            <>
-              <Avatar className="h-6 w-6 shrink-0" title={creator.full_name ?? undefined}>
-                <AvatarFallback className={cn("text-[10px]", avatarColor(creator.id))}>
-                  {initials(creator.full_name)}
-                </AvatarFallback>
-              </Avatar>
-              <span className="text-xs truncate">
-                {creator.full_name ?? "Unnamed"}
-              </span>
-            </>
-          ) : (
-            <EmptyCell />
-          )}
-        </div>
+          {task.title}
+        </span>
+        {subtaskTotal > 0 && (
+          <span
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0"
+            title={`${subtaskDone} of ${subtaskTotal} subtasks complete`}
+          >
+            <ListChecks className="h-3.5 w-3.5" />
+            {subtaskDone}/{subtaskTotal}
+          </span>
+        )}
+      </div>
 
-        {/* Priority */}
-        <div className={cn("shrink-0 flex items-center", COLUMN_WIDTHS.priority)}>
-          {priority ? (
-            <Badge
-              variant="outline"
-              className={cn("h-5 text-[10px] uppercase", priority.className)}
-            >
-              {priority.label}
-            </Badge>
-          ) : (
-            <EmptyCell />
-          )}
-        </div>
+      {/* Metadata strip. `divide-x` adds a vertical rule between cells.
+          `-my-2` bleeds the strip past the row's vertical padding so the
+          dividers span the full row height and read as continuous lines
+          across rows (only the 1px row border-b interrupts them). */}
+      <div className="shrink-0 flex items-stretch divide-x divide-border -my-2">
+        {order.map((id) => (
+          <div
+            key={id}
+            style={{ width: effectiveColumnWidth(id, widths) }}
+            className="shrink-0 px-2 flex items-center"
+          >
+            {renderCell(id)}
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -6,6 +6,8 @@ import { projectColorClass } from "@/features/projects/colors";
 import { useProjects } from "@/features/projects/useProjects";
 import { TaskDetailPanel } from "@/features/tasks/TaskDetailPanel";
 import { TaskList } from "@/features/tasks/TaskList";
+import { TaskSearchCombobox } from "@/features/tasks/TaskSearchCombobox";
+import { recordTaskOpened } from "@/features/tasks/useRecentTasks";
 import { useTasks } from "@/features/tasks/useTasks";
 import { useWorkspace } from "@/features/workspaces/useWorkspace";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
@@ -36,6 +38,12 @@ export default function ProjectView() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedTaskId = searchParams.get("task");
+
+  // Push the currently-open task id onto the recents stack so the global
+  // search combobox can show it next time the user opens search.
+  useEffect(() => {
+    if (selectedTaskId) recordTaskOpened(selectedTaskId);
+  }, [selectedTaskId]);
 
   const { data: tasks } = useTasks(projectId);
   const selectedTask = tasks?.find((t) => t.id === selectedTaskId) ?? null;
@@ -90,6 +98,9 @@ export default function ProjectView() {
           ) : (
             <p className="text-sm text-muted-foreground">Project not found</p>
           )}
+          <div className="ml-auto">
+            <TaskSearchCombobox workspaceId={workspace?.id} />
+          </div>
         </header>
 
         {/* TaskList owns its own scrolling so the Done section can stay

@@ -28,7 +28,9 @@ export function sectionDroppableId(sectionId: string | null): string {
 }
 
 export type SectionBlockProps = {
-  /** `null` renders the un-sectioned group: no header, no inline-add. */
+  /** `null` renders the un-sectioned group: no header, no inline-add. Pass
+   *  `pinnedHeaderLabel` alongside to give the unsectioned bucket a fixed,
+   *  uneditable header (used for "Unassigned" on My Tasks). */
   section: Section | null;
   tasks: Task[];
   collapsed: boolean;
@@ -46,6 +48,9 @@ export type SectionBlockProps = {
   /** Suppress the inline "+ Add task" button (used by My Tasks view where
    *  tasks can't be created — they enter the view via assignment). */
   hideAddTask?: boolean;
+  /** When `section` is null, render a synthetic header with this label.
+   *  No grip handle, no rename/delete menu — it can only be collapsed. */
+  pinnedHeaderLabel?: string;
 };
 
 export function SectionBlock({
@@ -59,7 +64,11 @@ export function SectionBlock({
   renderRow,
   dragListeners,
   hideAddTask = false,
+  pinnedHeaderLabel,
 }: SectionBlockProps) {
+  const hasHeader = !!section || !!pinnedHeaderLabel;
+  const showActionsMenu = !!section;
+  const headerLabel = section?.name ?? pinnedHeaderLabel ?? "";
   // For real sections only — the un-sectioned group adds via the top combo.
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -95,16 +104,17 @@ export function SectionBlock({
       ref={dropRef}
       className={cn(
         "transition-colors",
-        // Vertical breathing room around real sections so they read as
-        // distinct blocks. The un-sectioned bucket (no header) stays flush
-        // with the input above it.
-        section && "pt-6 pb-2",
+        // Vertical breathing room around any header — keeps real sections
+        // and the pinned Unassigned bucket reading as distinct blocks. The
+        // truly headerless variant (project view's unsectioned group)
+        // stays flush with the input above it.
+        hasHeader && "pt-6 pb-2",
         isOver && "bg-primary/5"
       )}
     >
-      {section && (
+      {hasHeader && (
         <header className="group flex items-center gap-1 px-3 py-1.5 hover:bg-[#F5F7FA] rounded-md transition-colors mx-1">
-          {dragListeners && (
+          {section && dragListeners && (
             <button
               type="button"
               {...dragListeners}
@@ -130,42 +140,44 @@ export function SectionBlock({
               <ChevronDown className="h-3.5 w-3.5" />
             )}
           </button>
-          <h3 className="text-lg font-semibold truncate" title={section.name}>
-            {section.name}
+          <h3 className="text-lg font-semibold truncate" title={headerLabel}>
+            {headerLabel}
           </h3>
           <span className="text-xs text-muted-foreground ml-1">{tasks.length}</span>
 
-          <div className="ml-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  aria-label={`Actions for ${section.name}`}
-                >
-                  <MoreHorizontal className="h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={onRenameClick}>
-                  <Pencil className="mr-2 h-3.5 w-3.5" />
-                  Rename section
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={onDeleteClick}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  Delete section
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          {showActionsMenu && (
+            <div className="ml-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    aria-label={`Actions for ${headerLabel}`}
+                  >
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={onRenameClick}>
+                    <Pencil className="mr-2 h-3.5 w-3.5" />
+                    Rename section
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={onDeleteClick}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    Delete section
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
         </header>
       )}
 
-      {(!section || !collapsed) && (
+      {(!hasHeader || !collapsed) && (
         <>
           <SortableContext
             items={tasks.map((t) => t.id)}

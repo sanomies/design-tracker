@@ -43,7 +43,14 @@ import { SectionBlock } from "@/features/sections/SectionBlock";
 import { SortableSection, sectionRowId } from "@/features/sections/SortableSection";
 import { SortableTaskRow } from "@/features/tasks/SortableTaskRow";
 import { TaskDetailPanel } from "@/features/tasks/TaskDetailPanel";
+import { TaskListHeader } from "@/features/tasks/TaskListHeader";
 import { TaskRow } from "@/features/tasks/TaskRow";
+import { TaskSearchCombobox } from "@/features/tasks/TaskSearchCombobox";
+import { recordTaskOpened } from "@/features/tasks/useRecentTasks";
+import { defaultFilters, matchesFilters, type Filters } from "@/features/tasks/taskFilters";
+import { type SortState } from "@/features/tasks/taskColumns";
+import { buildSortComparator } from "@/features/tasks/taskSort";
+import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
 import {
   useCreateMySection,
   useDeleteMySection,
@@ -61,6 +68,7 @@ type DoneSort = "latest" | "oldest";
 const DONE_SORT_STORAGE_KEY = "design-tracker:my-tasks:done-sort";
 const COLLAPSED_STORAGE_KEY = "design-tracker:my-tasks:collapsed-sections";
 const DONE_COLLAPSED_STORAGE_KEY = "design-tracker:my-tasks:done-collapsed";
+const UNASSIGNED_COLLAPSED_KEY = "design-tracker:my-tasks:unassigned-collapsed";
 
 // Adapter so the project-scoped SectionBlock can render a personal section.
 // SectionBlock only reads id/name from `section`; the rest of the Section
@@ -91,15 +99,28 @@ export default function MyTasksPage() {
   // technically a subtask of something else — its parent might not be mine.
   const allTasks = tasks ?? [];
 
+  // Column filter + sort state. Shared with the project view via the same
+  // TaskListHeader so both pages feel identical.
+  const [filters, setFilters] = useState<Filters>(defaultFilters);
+  const [sort, setSort] = useState<SortState>(null);
+
+  // Tasks here can span multiple workspaces, so no single workspace member
+  // list is "correct". We don't pass a workspace to the header — assignee
+  // and createdBy member filters will be empty options as a result, but
+  // publication / due / priority filters work the same as on the project
+  // view, and the rest of the chrome stays consistent.
+  const { data: members = [] } = useWorkspaceMembers(undefined);
+
   const { openTasks, doneTasks } = useMemo(() => {
     const open: MyTaskRow[] = [];
     const done: MyTaskRow[] = [];
     for (const t of allTasks) {
+      if (!matchesFilters(t, filters)) continue;
       if (t.status === "done") done.push(t);
       else open.push(t);
     }
     return { openTasks: open, doneTasks: done };
-  }, [allTasks]);
+  }, [allTasks, filters]);
 
   const sortedSections = useMemo(
     () => [...sections].sort((a, b) => a.position - b.position),
@@ -107,7 +128,8 @@ export default function MyTasksPage() {
   );
 
   // Group open tasks by my_section_id. Null my_position → top (new arrivals
-  // appear above already-placed ones in the same bucket).
+  // appear above already-placed ones in the same bucket). A column sort
+  // overrides the manual my_position order within each group.
   const { unsectioned, bySection } = useMemo(() => {
     const us: MyTaskRow[] = [];
     const by = new Map<string, MyTaskRow[]>();
@@ -128,10 +150,12 @@ export default function MyTasksPage() {
       if (bp === null) return 1;
       return ap - bp;
     };
-    us.sort(sortByMyPosition);
-    for (const arr of by.values()) arr.sort(sortByMyPosition);
+    const columnCmp = buildSortComparator(sort, members);
+    const finalCmp = columnCmp ?? sortByMyPosition;
+    us.sort(finalCmp);
+    for (const arr of by.values()) arr.sort(finalCmp);
     return { unsectioned: us, bySection: by };
-  }, [openTasks]);
+  }, [openTasks, sort, members]);
 
   // Done sort
   const [doneSort, setDoneSort] = useState<DoneSort>(() => {
@@ -185,6 +209,25 @@ export default function MyTasksPage() {
       return next;
     });
 
+  // "Unassigned" pinned section — synthetic, lives above the user's
+  // personal sections and can't be renamed or deleted. Collapse state is
+  // persisted just like the real sections.
+  const [unassignedCollapsed, setUnassignedCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem(UNASSIGNED_COLLAPSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(UNASSIGNED_COLLAPSED_KEY, String(unassignedCollapsed));
+    } catch {
+      // ignore
+    }
+  }, [unassignedCollapsed]);
+
   // Done collapse state
   const [doneCollapsed, setDoneCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -212,6 +255,10 @@ export default function MyTasksPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedTaskId = searchParams.get("task");
   const selectedTask = allTasks.find((t) => t.id === selectedTaskId) ?? null;
+  // Track opened tasks for the global search combobox's "Recents" list.
+  useEffect(() => {
+    if (selectedTaskId) recordTaskOpened(selectedTaskId);
+  }, [selectedTaskId]);
   const panelOpen = selectedTask !== null;
 
   const { width: panelWidth, isResizing, onPointerDown } = useResizablePanel({
@@ -452,7 +499,8 @@ export default function MyTasksPage() {
           {activeCount > 0 && (
             <span className="text-sm text-muted-foreground">{activeCount}</span>
           )}
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <TaskSearchCombobox workspaceId={undefined} />
             <Button
               type="button"
               size="sm"
@@ -476,6 +524,13 @@ export default function MyTasksPage() {
           <EmptyState onAddSection={() => setAddSectionOpen(true)} />
         ) : (
           <>
+            <TaskListHeader
+              workspaceId={undefined}
+              filters={filters}
+              onChange={setFilters}
+              sort={sort}
+              onSortChange={setSort}
+            />
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -484,21 +539,21 @@ export default function MyTasksPage() {
               onDragCancel={finishDrag}
             >
               <div className="flex-1 min-h-0 overflow-y-auto">
-                {/* Unsectioned tasks at top — same SectionBlock with no
-                    header, hideAddTask since this view is view-only. */}
-                {unsectioned.length > 0 && (
-                  <SectionBlock
-                    section={null}
-                    tasks={unsectioned}
-                    collapsed={false}
-                    onToggleCollapsed={() => undefined}
-                    onRenameClick={() => undefined}
-                    onDeleteClick={() => undefined}
-                    onAddTask={() => undefined}
-                    renderRow={renderRow}
-                    hideAddTask
-                  />
-                )}
+                {/* "Unassigned" — pinned at the top, always rendered. New
+                    assignments land here; the user can drag them into
+                    personal sections below. Can't be renamed or deleted. */}
+                <SectionBlock
+                  section={null}
+                  tasks={unsectioned}
+                  collapsed={unassignedCollapsed}
+                  onToggleCollapsed={() => setUnassignedCollapsed((c) => !c)}
+                  onRenameClick={() => undefined}
+                  onDeleteClick={() => undefined}
+                  onAddTask={() => undefined}
+                  renderRow={renderRow}
+                  hideAddTask
+                  pinnedHeaderLabel="Unassigned"
+                />
 
                 <SortableContext
                   items={sortedSections.map((s) => sectionRowId(s.id))}

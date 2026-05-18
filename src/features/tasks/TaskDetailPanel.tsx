@@ -1,15 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import {
   ArrowUpLeft,
-  CalendarIcon,
   MoreHorizontal,
+  Newspaper,
+  Plus,
   Trash2,
   X,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { useAttachments } from "@/features/attachments/useAttachments";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,13 +33,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { RichTextEditor, isEmptyHTML } from "@/components/rich-text/RichTextEditor";
 import {
   uploadEditorFile,
@@ -49,16 +45,12 @@ import { SubtaskList } from "@/features/tasks/SubtaskList";
 import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
 import { avatarColor } from "@/lib/avatarColor";
 import { cn } from "@/lib/utils";
-import type { Profile, Task, TaskPriority, TaskStatus } from "@/types/database";
+import type { Profile, Task, TaskPriority } from "@/types/database";
 
-import { PRIORITIES } from "./priority";
+import { PRIORITIES, priorityMeta } from "./priority";
+import { PublicationPickerContent } from "./PublicationPicker";
+import { getPublication } from "./publications";
 import { useDeleteTask, useTasks, useUpdateTask } from "./useTasks";
-
-const STATUSES: { value: TaskStatus; label: string }[] = [
-  { value: "todo", label: "To do" },
-  { value: "in_progress", label: "In progress" },
-  { value: "done", label: "Done" },
-];
 
 function initials(name: string | null | undefined): string {
   if (!name) return "?";
@@ -134,11 +126,28 @@ function PanelBody({
     }
   };
 
+  // Subtasks count from the project task tree — used to auto-expand the
+  // subtasks section when there's already content to show.
+  const subtaskCount = useMemo(
+    () => (tasks ?? []).filter((t) => t.parent_task_id === task.id).length,
+    [tasks, task.id]
+  );
+  const { data: attachments } = useAttachments(task.id);
+  const attachmentCount = attachments?.length ?? 0;
+
+  const [subtasksOpen, setSubtasksOpen] = useState(false);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const showSubtasks = subtasksOpen || subtaskCount > 0;
+  const showAttachments = attachmentsOpen || attachmentCount > 0;
+
   return (
     <div className="h-full flex flex-col">
-      <header className="px-4 h-14 border-b flex items-center justify-between shrink-0">
-        <h2 className="text-sm font-medium text-muted-foreground">Task details</h2>
-        <div className="flex items-center gap-1">
+      <header className="px-4 py-3 flex items-center justify-between gap-3 shrink-0">
+        <PublicationPill
+          value={task.publication}
+          onChange={(publication) => update({ publication })}
+        />
+        <div className="flex items-center gap-1 shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Task actions">
@@ -166,12 +175,12 @@ function PanelBody({
             section's background extends to the bottom of the panel even
             when the content above is short. */}
         <div className="flex flex-col min-h-full">
-          <section className="p-4 space-y-6">
+          <section className="px-4 pb-4 space-y-4">
             {task.parent_task_id && (
               <button
                 type="button"
                 onClick={openParent}
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground -mb-3 max-w-full"
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground max-w-full"
               >
                 <ArrowUpLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 <span className="truncate">
@@ -182,45 +191,35 @@ function PanelBody({
 
             <TitleField task={task} onSave={(title) => update({ title })} />
 
-            <div className="space-y-3">
-              <div className="flex gap-3">
-                <FieldCol label="Assignee">
-                  <AssigneePicker
-                    members={members ?? []}
-                    value={task.assignee_id}
-                    onChange={(assignee_id) => update({ assignee_id })}
+            <div className="divide-y">
+              <PropertyRow label="Assignee">
+                <AssigneeInline
+                  members={members ?? []}
+                  value={task.assignee_id}
+                  onChange={(assignee_id) => update({ assignee_id })}
+                />
+              </PropertyRow>
+              <PropertyRow label="Due">
+                <DueInline
+                  value={task.due_date}
+                  onChange={(due_date) => update({ due_date })}
+                />
+              </PropertyRow>
+              <PropertyRow label="Priority">
+                <PriorityInline
+                  value={task.priority}
+                  onChange={(priority) => update({ priority })}
+                />
+              </PropertyRow>
+              {(sections.length > 0 || task.section_id) && (
+                <PropertyRow label="Section">
+                  <SectionInline
+                    sections={sections}
+                    value={task.section_id}
+                    onChange={(section_id) => update({ section_id })}
                   />
-                </FieldCol>
-                <FieldCol label="Due date">
-                  <DueDatePicker
-                    value={task.due_date}
-                    onChange={(due_date) => update({ due_date })}
-                  />
-                </FieldCol>
-              </div>
-              <div className="flex gap-3">
-                <FieldCol label="Priority">
-                  <PrioritySelect
-                    value={task.priority}
-                    onChange={(priority) => update({ priority })}
-                  />
-                </FieldCol>
-                <FieldCol label="Status">
-                  <StatusSelect
-                    value={task.status}
-                    onChange={(status) => update({ status })}
-                  />
-                </FieldCol>
-                {(sections.length > 0 || task.section_id) && (
-                  <FieldCol label="Section">
-                    <SectionSelect
-                      sections={sections}
-                      value={task.section_id}
-                      onChange={(section_id) => update({ section_id })}
-                    />
-                  </FieldCol>
-                )}
-              </div>
+                </PropertyRow>
+              )}
             </div>
 
             <DescriptionField
@@ -229,9 +228,32 @@ function PanelBody({
               onSave={(description) => update({ description })}
             />
 
-            <SubtaskList parentTask={task} />
-
-            <AttachmentList task={task} />
+            {/* Subtasks + Attachment pills. Each collapses behind an outlined
+                "+ <name>" pill until the user clicks it (or the task already
+                has items in that section, in which case it auto-expands so
+                nothing is hidden behind a click). */}
+            {(!showSubtasks || !showAttachments) && (
+              <div className="flex flex-wrap gap-2">
+                {!showSubtasks && (
+                  <PillButton
+                    icon={<Plus className="h-3.5 w-3.5" />}
+                    onClick={() => setSubtasksOpen(true)}
+                  >
+                    Subtasks
+                  </PillButton>
+                )}
+                {!showAttachments && (
+                  <PillButton
+                    icon={<Plus className="h-3.5 w-3.5" />}
+                    onClick={() => setAttachmentsOpen(true)}
+                  >
+                    Attachment
+                  </PillButton>
+                )}
+              </div>
+            )}
+            {showSubtasks && <SubtaskList parentTask={task} />}
+            {showAttachments && <AttachmentList task={task} />}
           </section>
 
           <section className="flex-1 border-t bg-[#F5F7FA] p-4">
@@ -263,18 +285,10 @@ function PanelBody({
   );
 }
 
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[80px_1fr] items-center gap-3">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <div>{children}</div>
-    </div>
-  );
-}
-
-// Vertical-stacked field used inside a horizontal row of fields. Label on
-// top, control beneath, each taking equal width within the parent flex row.
-function FieldCol({
+// Table-style property row: muted label on the left, inline editable value
+// on the right. The parent applies `border-y divide-y` so a stack of these
+// reads as a thin lined table.
+function PropertyRow({
   label,
   children,
 }: {
@@ -282,10 +296,40 @@ function FieldCol({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex-1 min-w-0 space-y-1">
-      <span className="block text-xs text-muted-foreground">{label}</span>
-      {children}
+    <div className="grid grid-cols-[110px_1fr] items-center gap-3 py-2.5">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <div className="min-w-0">{children}</div>
     </div>
+  );
+}
+
+// Em-dash placeholder used wherever a property is unset.
+function EmptyValue() {
+  return <span className="text-sm text-muted-foreground">—</span>;
+}
+
+const PROPERTY_TRIGGER_CLASS =
+  "inline-flex items-center gap-1.5 rounded px-1 -mx-1 py-0.5 text-sm hover:bg-accent transition-colors max-w-full min-h-[28px]";
+
+// Outlined "+ Subtasks" / "+ Attachment" reveal pill in the body.
+function PillButton({
+  icon,
+  onClick,
+  children,
+}: {
+  icon: React.ReactNode;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background hover:bg-accent px-3 py-1.5 text-sm font-normal transition-colors"
+    >
+      {icon}
+      {children}
+    </button>
   );
 }
 
@@ -326,7 +370,7 @@ function TitleField({ task, onSave }: { task: Task; onSave: (title: string) => v
             setEditing(false);
           }
         }}
-        className="text-lg font-semibold"
+        className="text-2xl font-bold"
       />
     );
   }
@@ -335,7 +379,7 @@ function TitleField({ task, onSave }: { task: Task; onSave: (title: string) => v
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="text-lg font-semibold leading-snug text-left w-full hover:bg-muted/50 rounded px-1 -mx-1 py-0.5"
+      className="text-2xl font-bold leading-tight text-left w-full hover:bg-muted/50 rounded px-1 -mx-1 py-0.5"
     >
       {task.title}
     </button>
@@ -367,24 +411,71 @@ function DescriptionField({
 
   return (
     <div className="space-y-1.5">
-      <span className="text-xs text-muted-foreground">Description</span>
-      <RichTextEditor
-        key={task.id}
-        value={initial}
-        onBlur={commit}
-        members={members}
-        placeholder="Add more detail… @ to mention"
-        minHeight="120px"
-        onUploadImage={(file) => uploadEditorImage(file, task.id)}
-        onUploadFile={(file) => uploadEditorFile(file, task.id)}
-      />
+      <span className="text-sm text-muted-foreground">Description</span>
+      <div className="rounded-md border border-input">
+        <RichTextEditor
+          key={task.id}
+          value={initial}
+          onBlur={commit}
+          members={members}
+          placeholder="Add a description…"
+          minHeight="120px"
+          onUploadImage={(file) => uploadEditorImage(file, task.id)}
+          onUploadFile={(file) => uploadEditorFile(file, task.id)}
+        />
+      </div>
     </div>
   );
 }
 
-// Assignee --------------------------------------------------------------
+// Publication pill (top-left of the panel) ----------------------------
 
-function AssigneePicker({
+function PublicationPill({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (slug: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = getPublication(value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-md bg-muted/60 hover:bg-muted px-3 py-1.5 text-sm font-medium transition-colors max-w-full min-h-[36px]"
+        >
+          {current ? (
+            <img
+              src={current.thumbnail}
+              alt=""
+              className="h-6 w-6 rounded object-cover shrink-0"
+            />
+          ) : (
+            <span className="h-6 w-6 inline-flex items-center justify-center shrink-0">
+              <Newspaper className="h-4 w-4 text-muted-foreground" aria-hidden />
+            </span>
+          )}
+          <span className="truncate">{current ? current.name : "No publication"}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="p-1 w-64 max-h-80 overflow-y-auto">
+        <PublicationPickerContent
+          value={value}
+          onChange={onChange}
+          onClose={() => setOpen(false)}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+
+// Assignee inline (avatar + name in the right sidebar) ----------------
+
+function AssigneeInline({
   members,
   value,
   onChange,
@@ -399,20 +490,22 @@ function AssigneePicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="w-full justify-start font-normal">
-          <Avatar className="h-5 w-5 mr-2">
-            <AvatarFallback
-              className={cn("text-[10px]", current && avatarColor(current.id))}
-            >
-              {current ? initials(current.full_name) : "—"}
-            </AvatarFallback>
-          </Avatar>
-          <span className="truncate">
-            {current ? current.full_name ?? "Unnamed" : "Unassigned"}
-          </span>
-        </Button>
+        <button type="button" className={PROPERTY_TRIGGER_CLASS}>
+          {current ? (
+            <>
+              <Avatar className="h-5 w-5 shrink-0">
+                <AvatarFallback className={cn("text-[10px]", avatarColor(current.id))}>
+                  {initials(current.full_name)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="truncate">{current.full_name ?? "Unnamed"}</span>
+            </>
+          ) : (
+            <EmptyValue />
+          )}
+        </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="p-1 w-56">
+      <PopoverContent align="start" className="p-1 w-56 max-h-80 overflow-y-auto">
         <button
           type="button"
           className={cn(
@@ -455,9 +548,9 @@ function AssigneePicker({
   );
 }
 
-// Due date --------------------------------------------------------------
+// Due inline (plain date text in the right sidebar) -------------------
 
-function DueDatePicker({
+function DueInline({
   value,
   onChange,
 }: {
@@ -470,10 +563,13 @@ function DueDatePicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="w-full justify-start font-normal">
-          <CalendarIcon className="h-4 w-4 mr-2" />
-          {selected ? format(selected, "MMM d, yyyy") : <span className="text-muted-foreground">No due date</span>}
-        </Button>
+        <button type="button" className={PROPERTY_TRIGGER_CLASS}>
+          {selected ? (
+            <span>{format(selected, "MMM d, yyyy")}</span>
+          ) : (
+            <EmptyValue />
+          )}
+        </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="p-0 w-auto">
         <Calendar
@@ -505,63 +601,77 @@ function DueDatePicker({
   );
 }
 
-// Priority --------------------------------------------------------------
+// Priority inline (badge in the right sidebar) -----------------------
 
-function PrioritySelect({
+function PriorityInline({
   value,
   onChange,
 }: {
   value: TaskPriority | null;
   onChange: (value: TaskPriority | null) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const meta = priorityMeta(value);
+
   return (
-    <Select
-      value={value ?? "__none__"}
-      onValueChange={(v) => onChange(v === "__none__" ? null : (v as TaskPriority))}
-    >
-      <SelectTrigger className="h-9 text-sm font-normal">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="__none__">No priority</SelectItem>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className={PROPERTY_TRIGGER_CLASS}>
+          {meta ? (
+            <Badge
+              variant="outline"
+              className={cn("h-5 text-[10px] uppercase", meta.className)}
+            >
+              {meta.label}
+            </Badge>
+          ) : (
+            <EmptyValue />
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="p-1 w-44">
+        <button
+          type="button"
+          className={cn(
+            "w-full flex items-center rounded px-2 py-1.5 text-sm hover:bg-accent",
+            value === null && "bg-accent"
+          )}
+          onClick={() => {
+            onChange(null);
+            setOpen(false);
+          }}
+        >
+          No priority
+        </button>
         {PRIORITIES.map((p) => (
-          <SelectItem key={p.value} value={p.value}>
-            {p.label}
-          </SelectItem>
+          <button
+            key={p.value}
+            type="button"
+            className={cn(
+              "w-full flex items-center rounded px-2 py-1.5 text-sm hover:bg-accent",
+              value === p.value && "bg-accent"
+            )}
+            onClick={() => {
+              onChange(p.value);
+              setOpen(false);
+            }}
+          >
+            <Badge
+              variant="outline"
+              className={cn("h-5 text-[10px] uppercase", p.className)}
+            >
+              {p.label}
+            </Badge>
+          </button>
         ))}
-      </SelectContent>
-    </Select>
+      </PopoverContent>
+    </Popover>
   );
 }
 
-// Status ----------------------------------------------------------------
+// Section inline (plain text in the right sidebar) -------------------
 
-function StatusSelect({
-  value,
-  onChange,
-}: {
-  value: TaskStatus;
-  onChange: (value: TaskStatus) => void;
-}) {
-  return (
-    <Select value={value} onValueChange={(v) => onChange(v as TaskStatus)}>
-      <SelectTrigger className="h-9 text-sm font-normal">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {STATUSES.map((s) => (
-          <SelectItem key={s.value} value={s.value}>
-            {s.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-// Section ---------------------------------------------------------------
-
-function SectionSelect({
+function SectionInline({
   sections,
   value,
   onChange,
@@ -570,22 +680,51 @@ function SectionSelect({
   value: string | null;
   onChange: (id: string | null) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const current = sections.find((s) => s.id === value);
+
   return (
-    <Select
-      value={value ?? "__none__"}
-      onValueChange={(v) => onChange(v === "__none__" ? null : v)}
-    >
-      <SelectTrigger className="h-9 text-sm font-normal">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="__none__">No section</SelectItem>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className={PROPERTY_TRIGGER_CLASS}>
+          {current ? (
+            <span className="truncate">{current.name}</span>
+          ) : (
+            <EmptyValue />
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="p-1 w-56 max-h-80 overflow-y-auto">
+        <button
+          type="button"
+          className={cn(
+            "w-full flex items-center rounded px-2 py-1.5 text-sm hover:bg-accent",
+            value === null && "bg-accent"
+          )}
+          onClick={() => {
+            onChange(null);
+            setOpen(false);
+          }}
+        >
+          No section
+        </button>
         {sections.map((s) => (
-          <SelectItem key={s.id} value={s.id}>
-            {s.name}
-          </SelectItem>
+          <button
+            key={s.id}
+            type="button"
+            className={cn(
+              "w-full flex items-center rounded px-2 py-1.5 text-sm hover:bg-accent",
+              value === s.id && "bg-accent"
+            )}
+            onClick={() => {
+              onChange(s.id);
+              setOpen(false);
+            }}
+          >
+            <span className="truncate">{s.name}</span>
+          </button>
         ))}
-      </SelectContent>
-    </Select>
+      </PopoverContent>
+    </Popover>
   );
 }

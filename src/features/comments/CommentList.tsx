@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { toast } from "sonner";
-import { Download, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Download, MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 
 import {
   AlertDialog,
@@ -83,7 +83,8 @@ export function CommentList({
 
   return (
     <div className="space-y-3">
-      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <h3 className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+        <MessageSquare className="h-3.5 w-3.5" aria-hidden />
         Comments {comments && comments.length > 0 ? `(${comments.length})` : ""}
       </h3>
 
