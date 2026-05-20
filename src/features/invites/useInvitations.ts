@@ -19,10 +19,13 @@ export type InvitationPreview = {
   accepted_at: string | null;
 };
 
-// Build the shareable URL the user copies and sends.
+// Build the shareable URL the user copies and sends. BASE_URL is "/" in dev
+// and "/design-tracker/" in the Pages deploy — strip the trailing slash so we
+// don't emit a double-slash.
 export function inviteUrl(token: string): string {
-  if (typeof window === "undefined") return `/invite/${token}`;
-  return `${window.location.origin}/invite/${token}`;
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+  if (typeof window === "undefined") return `${base}/invite/${token}`;
+  return `${window.location.origin}${base}/invite/${token}`;
 }
 
 // List pending invitations for a workspace (excludes already-accepted).
