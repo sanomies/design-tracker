@@ -15,7 +15,7 @@ if (!root) throw new Error("Root element #root not found in index.html");
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <App />
       </BrowserRouter>
       <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-right" />
