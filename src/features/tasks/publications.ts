@@ -3,26 +3,26 @@
 // from here. Adding a new publication = drop a PNG in src/Publications/
 // <Category>/ and add an entry below.
 
-import arileht from "@/Publications/Delfi/arileht.png";
-import arvamus from "@/Publications/Delfi/arvamus.png";
-import delfi from "@/Publications/Delfi/delfi.png";
-import delfisport from "@/Publications/Delfi/delfisport.png";
-import geenius from "@/Publications/Delfi/geenius.png";
-import kultuur from "@/Publications/Delfi/kultuur.png";
-import piletitasku from "@/Publications/Delfi/piletitasku.png";
-import tasku from "@/Publications/Delfi/tasku.png";
+import arileht from "@/publications/Delfi/arileht.png";
+import arvamus from "@/publications/Delfi/arvamus.png";
+import delfi from "@/publications/Delfi/delfi.png";
+import delfisport from "@/publications/Delfi/delfisport.png";
+import geenius from "@/publications/Delfi/geenius.png";
+import kultuur from "@/publications/Delfi/kultuur.png";
+import piletitasku from "@/publications/Delfi/piletitasku.png";
+import tasku from "@/publications/Delfi/tasku.png";
 
-import annestiil from "@/Publications/Paper/annestiil.png";
-import eestiekspress from "@/Publications/Paper/eestiekspress.png";
-import eestinaine from "@/Publications/Paper/eestinaine.png";
-import kroonika from "@/Publications/Paper/kroonika.png";
-import lp from "@/Publications/Paper/lp.png";
-import maakodu from "@/Publications/Paper/maakodu.png";
-import maaleht from "@/Publications/Paper/maaleht.png";
-import omamaitse from "@/Publications/Paper/omamaitse.png";
-import perejakodu from "@/Publications/Paper/perejakodu.png";
+import annestiil from "@/publications/Paper/annestiil.png";
+import eestiekspress from "@/publications/Paper/eestiekspress.png";
+import eestinaine from "@/publications/Paper/eestinaine.png";
+import kroonika from "@/publications/Paper/kroonika.png";
+import lp from "@/publications/Paper/lp.png";
+import maakodu from "@/publications/Paper/maakodu.png";
+import maaleht from "@/publications/Paper/maaleht.png";
+import omamaitse from "@/publications/Paper/omamaitse.png";
+import perejakodu from "@/publications/Paper/perejakodu.png";
 
-import elamus from "@/Publications/Events/elamus.png";
+import elamus from "@/publications/Events/elamus.png";
 
 export type PublicationCategory = "Delfi" | "Paper" | "Events";
 
