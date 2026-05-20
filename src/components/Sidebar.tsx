@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Check, ChevronDown, LogOut, Plus, Users } from "lucide-react";
+import { Check, ChevronDown, LogOut, Mail, Plus, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { avatarColor } from "@/lib/avatarColor";
@@ -199,6 +200,12 @@ function UserMenu() {
       <DropdownMenuContent align="end" side="top" className="w-56">
         <DropdownMenuLabel>{user?.email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/settings/email">
+            <Mail className="mr-2 h-4 w-4" />
+            Email notifications
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => void signOut()}>
           <LogOut className="mr-2 h-4 w-4" />
           Sign out

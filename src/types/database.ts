@@ -16,18 +16,21 @@ export type Database = {
           id: string;
           full_name: string | null;
           avatar_url: string | null;
+          email_status: "ok" | "bounced" | "complained";
           created_at: string;
         };
         Insert: {
           id: string;
           full_name?: string | null;
           avatar_url?: string | null;
+          email_status?: "ok" | "bounced" | "complained";
           created_at?: string;
         };
         Update: {
           id?: string;
           full_name?: string | null;
           avatar_url?: string | null;
+          email_status?: "ok" | "bounced" | "complained";
           created_at?: string;
         };
       };
@@ -368,6 +371,79 @@ export type Database = {
           created_at?: string;
         };
       };
+      email_preferences: {
+        Row: {
+          user_id: string;
+          notify_assigned: boolean;
+          notify_mention: boolean;
+          notify_comment: boolean;
+          notify_invite: boolean;
+          unsubscribe_token: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          notify_assigned?: boolean;
+          notify_mention?: boolean;
+          notify_comment?: boolean;
+          notify_invite?: boolean;
+          unsubscribe_token?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          notify_assigned?: boolean;
+          notify_mention?: boolean;
+          notify_comment?: boolean;
+          notify_invite?: boolean;
+          unsubscribe_token?: string;
+          updated_at?: string;
+        };
+      };
+      email_log: {
+        Row: {
+          id: string;
+          recipient_id: string | null;
+          template: string;
+          status: "queued" | "sent" | "failed" | "skipped" | "bounced" | "complained";
+          resend_message_id: string | null;
+          notification_id: string | null;
+          invitation_id: string | null;
+          payload: Json | null;
+          error_message: string | null;
+          retry_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          recipient_id?: string | null;
+          template: string;
+          status: "queued" | "sent" | "failed" | "skipped" | "bounced" | "complained";
+          resend_message_id?: string | null;
+          notification_id?: string | null;
+          invitation_id?: string | null;
+          payload?: Json | null;
+          error_message?: string | null;
+          retry_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          recipient_id?: string | null;
+          template?: string;
+          status?: "queued" | "sent" | "failed" | "skipped" | "bounced" | "complained";
+          resend_message_id?: string | null;
+          notification_id?: string | null;
+          invitation_id?: string | null;
+          payload?: Json | null;
+          error_message?: string | null;
+          retry_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
     Functions: {
       is_workspace_member: {
@@ -399,6 +475,10 @@ export type Database = {
         Args: { _token: string };
         Returns: string;
       };
+      unsubscribe_email: {
+        Args: { _token: string; _kind?: "all" | "assigned" | "mention" | "comment" | "invite" };
+        Returns: boolean;
+      };
     };
     Enums: Record<string, never>;
   };
@@ -421,3 +501,6 @@ export type Attachment = T["attachments"]["Row"];
 export type WorkspaceInvitation = T["workspace_invitations"]["Row"];
 export type Notification = T["notifications"]["Row"];
 export type NotificationType = Notification["type"];
+export type EmailPreferences = T["email_preferences"]["Row"];
+export type EmailPreferencesUpdate = T["email_preferences"]["Update"];
+export type EmailLog = T["email_log"]["Row"];
