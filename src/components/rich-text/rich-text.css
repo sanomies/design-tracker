@@ -140,6 +140,58 @@
   @apply inline-flex items-center rounded px-1 py-0 text-sm font-medium bg-primary/10 text-primary;
 }
 
+/* Banner pills (custom inline atom node, see BannerNode.tsx). Subtle per-
+   category color so a glance distinguishes Desktop / Mobile / Social
+   without shouting over the surrounding prose. */
+.banner-pill {
+  @apply inline-flex items-center gap-1 align-baseline rounded px-1.5 py-0 text-xs font-medium border;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.banner-pill-desktop {
+  @apply bg-blue-50 text-blue-900 border-blue-200;
+}
+.banner-pill-mobile {
+  @apply bg-emerald-50 text-emerald-900 border-emerald-200;
+}
+.banner-pill-social {
+  @apply bg-violet-50 text-violet-900 border-violet-200;
+}
+.banner-pill-unknown {
+  @apply bg-muted text-muted-foreground border-border;
+}
+
+.banner-pill-label {
+  @apply leading-relaxed;
+}
+
+/* The remove (×) affordance only renders inside the editor (NodeView).
+   Read-only renderings via RichTextContent emit the same span without the
+   button — the rule is keyed to the button itself, so it just stays hidden
+   in that case. */
+.banner-pill-remove {
+  @apply inline-flex items-center justify-center rounded-sm transition-opacity;
+  color: currentColor;
+  opacity: 0.4;
+  width: 14px;
+  height: 14px;
+  margin-left: 2px;
+  margin-right: -2px;
+}
+
+.banner-pill:hover .banner-pill-remove,
+.banner-pill:focus-within .banner-pill-remove,
+.banner-pill-remove:hover,
+.banner-pill.ProseMirror-selectednode .banner-pill-remove {
+  opacity: 1;
+}
+
+/* Highlight the pill when ProseMirror selects it as an atom. */
+.banner-pill.ProseMirror-selectednode {
+  @apply ring-2 ring-primary/40;
+}
+
 /* Mention suggestion popup container injected by tippy.js. */
 .tippy-box[data-theme~="mention"] {
   background: transparent;

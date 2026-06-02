@@ -17,7 +17,7 @@ const ALLOWED_TAGS = [
 ];
 
 const ALLOWED_ATTR = [
-  "class", "data-type", "data-id", "data-label",
+  "class", "data-type", "data-id", "data-label", "data-banner-id",
   "href", "target", "rel",
   "src", "alt",
   "colspan", "rowspan",

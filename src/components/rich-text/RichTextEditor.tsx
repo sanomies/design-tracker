@@ -22,6 +22,7 @@ import {
   Heading2,
   Image as ImageIcon,
   Italic,
+  LayoutGrid,
   Link2,
   List,
   ListOrdered,
@@ -63,6 +64,16 @@ import type { Profile } from "@/types/database";
 import { MentionList, type MentionListHandle, type MentionItem } from "./MentionList";
 import { SlashCommand, type SlashCommandPayload } from "./SlashCommandExtension";
 import { SlashMenu, type SlashItem, type SlashMenuHandle } from "./SlashMenu";
+import { BannerNode } from "./BannerNode";
+import { BannerPicker, type AnchorTarget as BannerAnchor } from "./BannerPicker";
+import { CopyDimensionsOverlay } from "./CopyDimensionsOverlay";
+import type { Banner } from "./bannerCatalog";
+
+type BannerPickerState = {
+  open: boolean;
+  anchor: BannerAnchor | null;
+  initialFilter: string;
+};
 
 type Props = {
   value: string;
@@ -156,10 +167,12 @@ function buildSlashSuggestion({
   onOpenImage,
   onOpenEmbed,
   onOpenEmoji,
+  onOpenBanners,
 }: {
   onOpenImage: () => void;
   onOpenEmbed: () => void;
   onOpenEmoji: () => void;
+  onOpenBanners: (initialFilter: string) => void;
 }): Omit<SuggestionOptions<SlashCommandItem>, "editor"> {
   const items: SlashCommandItem[] = [
     {
@@ -283,14 +296,41 @@ function buildSlashSuggestion({
     },
   ];
 
+  // Builds the "Banners" entry. The `query` is baked into `run` so that
+  // `/banners 800` opens the picker with "800" pre-filled — we can't get the
+  // query inside `run` from the suggestion plugin otherwise.
+  const buildBannersItem = (query: string): SlashCommandItem => {
+    const q = query.trim();
+    const filter = /^banners\b/i.test(q) ? q.replace(/^banners\s*/i, "") : "";
+    return {
+      id: "banners",
+      label: "Banners",
+      hint: "›",
+      keywords: ["banner", "ad", "creative", "size", "dimension"],
+      icon: <LayoutGrid className="h-3.5 w-3.5" />,
+      run: ({ editor, range }) => {
+        editor.chain().focus().deleteRange(range).run();
+        onOpenBanners(filter);
+      },
+    };
+  };
+
   return {
     items: ({ query }) => {
       const q = query.toLowerCase().trim();
-      if (!q) return items;
-      return items.filter((item) => {
+      const banners = buildBannersItem(query);
+      // `/banners[…]` shortcut: always surface ONLY the Banners entry so
+      // pressing Enter opens the sub-menu with the rest as a filter.
+      if (q.startsWith("banners")) return [banners];
+      if (!q) return [...items, banners];
+      const matchesBanners =
+        "banners".includes(q) ||
+        banners.keywords?.some((k) => k.toLowerCase().includes(q));
+      const filtered = items.filter((item) => {
         if (item.label.toLowerCase().includes(q)) return true;
         return item.keywords?.some((k) => k.toLowerCase().includes(q)) ?? false;
       });
+      return matchesBanners ? [...filtered, banners] : filtered;
     },
     render: () => {
       let component: ReactRenderer<SlashMenuHandle> | null = null;
@@ -355,11 +395,42 @@ export function RichTextEditor({
   const [imageOpen, setImageOpen] = useState(false);
   const [embedOpen, setEmbedOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [bannerPicker, setBannerPicker] = useState<BannerPickerState>({
+    open: false,
+    anchor: null,
+    initialFilter: "",
+  });
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const imageFileInputRef = useRef<HTMLInputElement>(null);
+  // Wrapper ref so the banner picker can anchor outside the editor content
+  // area (below the whole field) instead of at the cursor — that way the
+  // picker doesn't cover pills the user has already inserted.
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   const showToolbar =
-    editorFocused || insertOpen || linkOpen || imageOpen || embedOpen || emojiOpen;
+    editorFocused ||
+    insertOpen ||
+    linkOpen ||
+    imageOpen ||
+    embedOpen ||
+    emojiOpen ||
+    bannerPicker.open;
+
+  // Slash-command closures freeze at editor mount, so route the latest
+  // banner-picker opener through a ref (same pattern as mentions / uploaders).
+  // Both / and + flows anchor to the editor wrapper so the picker drops
+  // below the whole field — never on top of pills the user has already
+  // inserted.
+  const openBannerPickerRef = useRef<(initialFilter: string) => void>(() => {});
+  openBannerPickerRef.current = (initialFilter) => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    setBannerPicker({
+      open: true,
+      anchor: { type: "element", element: el },
+      initialFilter,
+    });
+  };
 
   // See buildMentionSuggestion — editor closures freeze at mount, so we
   // route the latest members through a ref.
@@ -530,8 +601,10 @@ export function RichTextEditor({
           onOpenImage: () => triggerImagePickerOrDialog(),
           onOpenEmbed: () => setEmbedOpen(true),
           onOpenEmoji: () => setEmojiOpen(true),
+          onOpenBanners: (filter) => openBannerPickerRef.current(filter),
         }),
       }),
+      BannerNode,
     ],
     content: value || "",
     autofocus: autoFocus ?? false,
@@ -633,6 +706,7 @@ export function RichTextEditor({
 
   return (
     <div
+      ref={wrapperRef}
       className={cn(
         "relative rounded-md border bg-background transition-colors",
         showToolbar ? "ring-1 ring-ring/40" : "",
@@ -679,6 +753,21 @@ export function RichTextEditor({
         />
       )}
       <EditorContent editor={editor} className="px-3 py-2" />
+      <CopyDimensionsOverlay editor={editor} />
+      <BannerPicker
+        open={bannerPicker.open}
+        onOpenChange={(open) =>
+          setBannerPicker((s) => ({ ...s, open }))
+        }
+        anchor={bannerPicker.anchor}
+        initialFilter={bannerPicker.initialFilter}
+        insertedIds={collectBannerIds(editor)}
+        onInsert={(banner: Banner) => {
+          // editor.commands (NOT chain().focus()) so the picker keeps focus
+          // and stays open for another pick.
+          editor.commands.insertBanner(banner.id);
+        }}
+      />
       {/* Toolbar stays mounted so it can transition in both directions.
           Wrapper handles the open/close animation; the toolbar itself owns
           its visual styling. */}
@@ -704,6 +793,7 @@ export function RichTextEditor({
           emojiOpen={emojiOpen}
           setEmojiOpen={setEmojiOpen}
           onTriggerImage={triggerImagePickerOrDialog}
+          onOpenBanners={() => openBannerPickerRef.current("")}
         />
       </div>
 
@@ -714,6 +804,20 @@ export function RichTextEditor({
       )}
     </div>
   );
+}
+
+/** Collects the bannerIds currently present in the editor doc. Used to mark
+ *  already-inserted banners with a check mark in the picker. */
+function collectBannerIds(editor: Editor | null): Set<string> {
+  const ids = new Set<string>();
+  if (!editor) return ids;
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === "banner" && node.attrs.bannerId) {
+      ids.add(node.attrs.bannerId);
+    }
+    return true;
+  });
+  return ids;
 }
 
 function hasAnyFiles(dt: DataTransfer | null): boolean {
@@ -807,6 +911,7 @@ type ToolbarProps = {
   emojiOpen: boolean;
   setEmojiOpen: (v: boolean) => void;
   onTriggerImage: () => void;
+  onOpenBanners: () => void;
 };
 
 function Toolbar({
@@ -822,6 +927,7 @@ function Toolbar({
   emojiOpen,
   setEmojiOpen,
   onTriggerImage,
+  onOpenBanners,
 }: ToolbarProps) {
   return (
     <div
@@ -839,6 +945,7 @@ function Toolbar({
         onOpenImage={onTriggerImage}
         onOpenEmoji={() => setEmojiOpen(true)}
         onOpenEmbed={() => setEmbedOpen(true)}
+        onOpenBanners={onOpenBanners}
       />
 
       <Divider />
@@ -1008,6 +1115,7 @@ function InsertMenu({
   onOpenImage,
   onOpenEmoji,
   onOpenEmbed,
+  onOpenBanners,
 }: {
   editor: Editor;
   open: boolean;
@@ -1015,6 +1123,7 @@ function InsertMenu({
   onOpenImage: () => void;
   onOpenEmoji: () => void;
   onOpenEmbed: () => void;
+  onOpenBanners: () => void;
 }) {
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
@@ -1099,6 +1208,17 @@ function InsertMenu({
           icon={<ExternalLink className="h-3.5 w-3.5" />}
           label="Embed link"
           onSelect={onOpenEmbed}
+        />
+        <DropdownMenuSeparator />
+        <MenuRow
+          icon={<LayoutGrid className="h-3.5 w-3.5" />}
+          label="Banners"
+          onSelect={() => {
+            // Restore the editor's last selection so the banner insert lands
+            // where the user was typing before they reached for the toolbar.
+            editor.commands.focus();
+            onOpenBanners();
+          }}
         />
       </DropdownMenuContent>
     </DropdownMenu>

@@ -34,7 +34,7 @@ export default function App() {
             </Route>
           </Route>
         </Routes>
-        <Toaster richColors position="bottom-right" />
+        <Toaster richColors position="bottom-center" />
       </CurrentWorkspaceProvider>
     </AuthProvider>
   );

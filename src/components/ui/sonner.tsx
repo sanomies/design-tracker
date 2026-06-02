@@ -35,6 +35,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
             "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
           cancelButton:
             "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+          // Positive toasts get a green outline + green icon. `!` overrides
+          // the base `border-border` from the toast class above.
+          success:
+            "group-[.toaster]:!border-green-500 group-[.toaster]:[&_[data-icon]]:!text-green-500",
         },
       }}
       {...props}
