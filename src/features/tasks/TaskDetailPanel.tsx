@@ -370,7 +370,7 @@ function TitleField({ task, onSave }: { task: Task; onSave: (title: string) => v
             setEditing(false);
           }
         }}
-        className="text-2xl font-bold"
+        className="text-2xl md:text-2xl font-bold h-auto leading-tight py-2 focus-visible:ring-offset-0 focus-visible:ring-inset"
       />
     );
   }

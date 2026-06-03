@@ -6,11 +6,13 @@ A simplified Asana-style task manager built on Supabase. Vite + React + TypeScri
 
 - **Vite + React 18 + TypeScript** (strict, `noUncheckedIndexedAccess`)
 - **Tailwind CSS** + **shadcn/ui** primitives
-- **Supabase** for Postgres, Auth, and Storage
+- **Supabase** for Postgres, Auth, Storage, and Realtime
 - **TanStack Query** for server state with optimistic mutations
 - **React Router v6**, **Zod**, **react-hook-form**
 - **TipTap** for the rich-text editor (mentions, slash commands, tables, etc.)
 - **DOMPurify** for sanitizing stored HTML on render
+- **@dnd-kit** for drag-and-drop (sections, task reordering)
+- **Resend** for transactional email (invites, mentions, assignments, replies)
 
 ---
 
@@ -26,13 +28,26 @@ In **Authentication → URL Configuration**, set **Site URL** to `http://localho
 
 ### 2. Run the migrations
 
-In the SQL Editor, run each file in order:
+Easiest path — `npx supabase link --project-ref <ref>` then `npx supabase db push`. Or copy each file into the SQL Editor in order:
 
 ```
-supabase/migrations/0001_init.sql      # tables + indexes (incl. columns reserved for subtasks/etc.)
-supabase/migrations/0002_rls.sql       # SECURITY DEFINER helpers + RLS policies on every table
-supabase/migrations/0003_triggers.sql  # signup trigger: creates profile + default workspace
-supabase/migrations/0004_storage.sql   # private task-attachments bucket + path-scoped policies
+0001_init.sql                          # tables + indexes
+0002_rls.sql                           # SECURITY DEFINER helpers + RLS on every table
+0003_triggers.sql                      # signup trigger: profile + default workspace
+0004_storage.sql                       # task-attachments bucket + path-scoped policies
+0005_invitations.sql                   # workspace_invitations table + token flow
+0006_workspace_project_membership.sql  # multi-user collab + per-project access
+0007_realtime.sql                      # publication wiring for postgres_changes
+0008_notifications.sql                 # in-app notification inbox
+0009_notification_types_v2.sql         # mention / assigned / comment types
+0010_task_completed_at.sql             # timestamp for completion analytics
+0011_sections.sql                      # ordered sections within a project
+0012_attachments_creator_delete.sql    # creators can delete their own uploads
+0013_editor_images.sql                 # task-images bucket (rich-text inline media)
+0014_drop_task_views.sql               # removed saved-views experiment
+0015_my_task_sections.sql              # personal "My tasks" grouping
+0016_task_publication.sql              # publication picker + per-task brand pill
+0017_email_notifications.sql           # email queue, prefs, unsubscribe tokens, bounces
 ```
 
 ### 3. Env vars
@@ -59,7 +74,7 @@ After your first user is confirmed, run `supabase/seed.sql` in the SQL Editor. I
 
 ---
 
-## What's in v1
+## What's in the app
 
 ### Auth
 - Email/password sign-up and sign-in with email confirmation
@@ -67,30 +82,60 @@ After your first user is confirmed, run `supabase/seed.sql` in the SQL Editor. I
 - Protected route wrapper with skeleton state
 - Signup trigger auto-creates the user's profile + default workspace
 
+### Workspaces & invites
+- Multi-user workspaces with per-project membership
+- Invite by email from the Members dialog — Resend delivers a transactional invite with a tokenized accept URL
+- Invitees who already have an account land straight in the workspace; new users are walked through signup and auto-joined
+- Per-user role + revocation; pending invites visible and re-sendable
+
 ### Projects
-- Sidebar list of all projects in the user's workspace
+- Sidebar list of all projects you can access in the workspace
 - New-project dialog: name + 6-color picker (pink/red/orange/yellow/green/teal)
 - Rename + delete from per-row dropdown; deletes navigate away if you're viewing the project
 - All mutations optimistic with rollback + toast on failure
 
+### Sections
+- Each project can be grouped into ordered sections (drag-and-drop reorder via @dnd-kit)
+- Tasks live inside a section or in an "uncategorized" bucket
+- Inline rename, delete, and add-section affordance at the end of the list
+
 ### Tasks
-- List view with inline-add at the top — Enter creates, focus stays so you can keep adding; `/` from anywhere in the project focuses it
-- Row shows: checkbox (toggles done ↔ todo), title, priority badge, due date with red/amber/muted tones for past/today/future, assignee avatar
+- List view with inline-add per section — Enter creates, focus stays for rapid entry; `/` from anywhere in the project focuses the first inline-add
+- Configurable columns (assignee, due date, priority, publication, etc.) — toggle from the list header
+- Sort + filter controls in the header (by due date, priority, assignee, completion)
+- Row shows: checkbox (toggles done ↔ todo), title, columns you've enabled, drag handle for cross-section reordering
 - Click a row → slide-in detail panel (right side, not modal)
 - Panel state lives in the URL (`?task=<uuid>`) so refresh keeps it open and browser-back closes it
+- **Subtasks**: nest tasks under a parent; the detail panel shows a "Back to parent" breadcrumb and a subtask list with the same inline-add affordance
+- **Publications**: tag a task with a brand/publication (Delfi, Tasku, Geenius, etc.) — shown as a colored pill in the panel header and as a column on the list
+- Global search (`Cmd/Ctrl+K`) — combobox across every task you can see, with project + section context
+
+### My tasks
+- Dedicated route showing every task assigned to you across all projects
+- Personal sections (Today / Upcoming / Later / Done) — drag tasks between buckets, order persists per user
 
 ### Detail panel
 - Wide (600 px default), **drag the left edge to resize**, width persisted to localStorage, viewport-clamped
 - Drop shadow on left edge, **not a modal** — task list stays visible and clickable
 - Esc closes (skipped when any inner dialog/menu is open)
-- All fields inline-editable: title (click → input, Enter/blur to save), description (rich-text), assignee (popover with workspace members), due date (calendar popover), priority (todo/in_progress/done), status
+- All fields inline-editable: title (click → input, Enter/blur to save), description (rich-text), assignee (popover with workspace members), due date (calendar popover), priority, status, publication
+
+### Notifications
+- In-app inbox (bell in the sidebar) with unread badge — fed by realtime subscriptions, no polling
+- Notification types: assigned to you, @-mentioned in a comment/description, reply on a task you follow
+- Click a notification → opens the task panel scrolled to the relevant comment
+- Per-user email preferences at `/settings/email` (one toggle per type) with token-based unsubscribe links that work without login
+- Bounce + spam-complaint handling: addresses that bounce get flagged and skipped on future sends
+- See [EMAIL_SETUP.md](EMAIL_SETUP.md) for the Resend + DNS + secrets walkthrough
 
 ### Rich-text editor (description + comments)
 - TipTap with markdown input rules (`**bold**`, `1. `, etc.)
-- Floating toolbar that **fades in only when the editor is focused**, with: Undo/Redo · Bold/Italic/Underline/Strikethrough · Bulleted/Numbered/Quote · Link/Code/Code block
-- **`+` insert menu**: Paragraph, Heading 1/2, lists, quote, code block, table (3×3 w/ header), section break, emoji picker, image URL, mention, embed link
+- Sticky toolbar at the bottom of the description box with: Undo/Redo · Bold/Italic/Underline/Strikethrough · Bulleted/Numbered/Quote · Link/Code/Code block
+- **`+` insert menu**: Paragraph, Heading 1/2, lists, quote, code block, table (3×3 w/ header), section break, emoji picker, image upload/URL, mention, embed link, banner picker
 - **`/` slash command** (Notion-style) — same options, filterable as you type (`/h1`, `/table`, `/img`)
-- **`@` mention** — popup of workspace members, keyboard-navigable, inserts a styled chip carrying `data-id` so a future notification job can extract mentions
+- **`@` mention** — popup of workspace members, keyboard-navigable, inserts a styled chip carrying `data-id` that the notification pipeline scrapes to fire mention emails
+- **Inline image upload** straight from the toolbar/slash menu — files land in the `task-images` bucket and the editor inserts a `<img>` with the public URL
+- **Banner picker** for description headers (publication-themed banner images)
 - HTML stored in DB; rendered through DOMPurify with an allowlist
 
 ### Comments
@@ -109,11 +154,16 @@ After your first user is confirmed, run `supabase/seed.sql` in the SQL Editor. I
   - Bottom thumbnail strip with all attachments; active one rings and auto-scrolls into view
   - Esc closes, body scroll locked while open
 
+### Realtime
+- Supabase `postgres_changes` subscriptions on tasks, comments, notifications, sections
+- Edits made by other workspace members appear without refresh — including new tasks, status flips, comments, and inbox notifications
+- TanStack Query cache is patched in-place so optimistic updates don't fight realtime echoes
+
 ### Polish
 - Skeletons during initial loads
-- Toasts (sonner) on every mutation failure — no silent swallowing
+- Toasts (sonner, bottom-center) on every mutation failure — no silent swallowing
 - Empty states for "no projects yet" and "no tasks yet"
-- Keyboard: Enter submits forms, Esc closes panels/dialogs, `/` focuses inline-add
+- Keyboard: Enter submits forms, Esc closes panels/dialogs, `/` focuses inline-add, `Cmd/Ctrl+K` opens global search
 
 ---
 
@@ -157,11 +207,15 @@ src/
     ProtectedRoute.tsx
   features/
     auth/                  # AuthProvider, useAuth, login/signup pages, schemas
-    workspaces/            # default workspace + members hooks
+    workspaces/            # workspace + members hooks, members dialog
+    invites/               # workspace invitation flow (send/accept/revoke)
     projects/              # queries + mutations, new/rename/delete UI, color palette
-    tasks/                 # task list, row, detail panel, priority palette
+    sections/              # ordered section blocks, drag-drop, dialogs
+    tasks/                 # list, row, detail panel, subtasks, search, sort/filter, publications
     comments/              # query + mutation, list + composer
     attachments/           # tile grid, lightbox, signed URL helpers
+    notifications/         # inbox link + realtime hooks
+    preferences/           # per-user email notification settings + unsubscribe page
   routes/
     HomeEmpty.tsx
     ProjectView.tsx
@@ -187,17 +241,24 @@ supabase/
 
 ---
 
-## What's not in v1 (deferred follow-ups)
+## Deployment
 
-The schema already has columns/tables reserved for these — no data-model migrations needed when they land:
+The app builds to a static bundle and is wired to deploy to GitHub Pages under the `/design-tracker/` subpath:
 
-- **Subtasks** (`tasks.parent_task_id` exists; the task query filters it out for now)
-- **Board (Kanban) view**
-- **Workspace member invites** (multi-user collab — needs an invite flow + email)
-- **Realtime subscriptions** (postgres_changes on tasks/comments)
-- **Notifications** — `@`-mention nodes already carry `data-id`; a worker can scrape them
-- **Search / filters / sort** beyond default ordering
+```bash
+npm run build           # outputs dist/ with BASE_URL=/design-tracker/
+```
+
+`vite.config.ts` sets the base, and `src/lib/env.ts` reads `VITE_*` vars at build time. For the live site, GitHub Actions builds on push to `main` and publishes `dist/` to the `gh-pages` branch.
+
+Auth redirect URLs in Supabase need to include both `http://localhost:5173` and the production origin (`https://<user>.github.io/design-tracker/`).
+
+---
+
+## Still on the backlog
+
+- **Board (Kanban) view** — schema-ready, no UI yet
 - **Mobile-specific layouts** — desktop-first for now
-- **Image upload from the rich-text editor's Image dialog** — currently URL-only; same upload pipeline as attachments would slot in
-- **Drag-drop file upload** onto the attachments grid
 - **Rich link previews** (oembed cards for the `Embed link` insert) — needs a server piece
+- **Drag-drop file upload** onto the attachments grid (Cmd-V multi-file from Finder is blocked by a Chrome/macOS limitation — only one file surfaces)
+- **Recurring tasks** and **time tracking**
