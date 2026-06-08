@@ -38,7 +38,7 @@ export default function HomeEmpty() {
         </div>
         <h2 className="text-lg font-semibold">Select a project</h2>
         <p className="text-sm text-muted-foreground">
-          Pick a project from the sidebar, or create your first one to start tracking work.
+          Pick a project, or create your first one to start tracking work.
         </p>
       </div>
     </div>

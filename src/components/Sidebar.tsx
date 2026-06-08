@@ -94,7 +94,7 @@ export function Sidebar() {
   );
 }
 
-function WorkspaceSwitcher({
+export function WorkspaceSwitcher({
   currentName,
   onOpenMembers,
 }: {
@@ -150,7 +150,7 @@ function WorkspaceSwitcher({
   );
 }
 
-function ProjectsSection({ workspaceId }: { workspaceId: string | undefined }) {
+export function ProjectsSection({ workspaceId }: { workspaceId: string | undefined }) {
   const { data: projects, isLoading } = useProjects(workspaceId);
   const reorderProject = useReorderProject(workspaceId);
   const [newOpen, setNewOpen] = useState(false);
@@ -255,7 +255,7 @@ function ProjectsSection({ workspaceId }: { workspaceId: string | undefined }) {
   );
 }
 
-function UserMenu() {
+export function UserMenu() {
   const { user, signOut } = useAuth();
   const fullName =
     (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? "User";

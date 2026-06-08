@@ -10,6 +10,7 @@ import { TaskSearchCombobox } from "@/features/tasks/TaskSearchCombobox";
 import { recordTaskOpened } from "@/features/tasks/useRecentTasks";
 import { useTasks } from "@/features/tasks/useTasks";
 import { useWorkspace } from "@/features/workspaces/useWorkspace";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +49,7 @@ export default function ProjectView() {
   const { data: tasks } = useTasks(projectId);
   const selectedTask = tasks?.find((t) => t.id === selectedTaskId) ?? null;
   const panelOpen = selectedTask !== null;
+  const isMobile = useIsMobile();
 
   const { width: panelWidth, isResizing, onPointerDown } = useResizablePanel({
     defaultWidth: 600,
@@ -57,11 +59,13 @@ export default function ProjectView() {
 
   // Fullscreen mode for the detail panel — toggled from the panel's
   // header. Reset whenever the panel closes so reopening starts in the
-  // default sidebar layout.
+  // default sidebar layout. On mobile the side panel layout never
+  // applies — the panel is always rendered as a full-screen overlay.
   const [panelFullscreen, setPanelFullscreen] = useState(false);
   useEffect(() => {
     if (!panelOpen) setPanelFullscreen(false);
   }, [panelOpen]);
+  const showAsFullscreen = panelFullscreen || isMobile;
 
   const closePanel = () => {
     const next = new URLSearchParams(searchParams);
@@ -109,10 +113,14 @@ export default function ProjectView() {
           )}
           {/* flex-1 + justify-end lets the search grow into all
               remaining header width; the combobox itself caps at
-              400px and stays right-aligned within. */}
-          <div className="ml-auto flex-1 flex justify-end">
-            <TaskSearchCombobox workspaceId={workspace?.id} />
-          </div>
+              400px and stays right-aligned within. On mobile, search
+              lives in the bottom tab bar instead, so the header just
+              shows the project pill + title. */}
+          {!isMobile && (
+            <div className="ml-auto flex-1 flex justify-end">
+              <TaskSearchCombobox workspaceId={workspace?.id} />
+            </div>
+          )}
         </header>
 
         {/* TaskList owns its own scrolling so the Done section can stay
@@ -124,10 +132,12 @@ export default function ProjectView() {
       </section>
 
       {/* Sidebar rendering — only used when NOT in fullscreen mode.
-          Width animates between 0 (closed) and `panelWidth` (open). */}
+          Width animates between 0 (closed) and `panelWidth` (open).
+          On mobile the side layout never applies — the panel always
+          renders as a fullscreen overlay below. */}
       <aside
-        aria-hidden={!panelOpen || panelFullscreen}
-        style={{ width: panelOpen && !panelFullscreen ? panelWidth : 0 }}
+        aria-hidden={!panelOpen || showAsFullscreen}
+        style={{ width: panelOpen && !showAsFullscreen ? panelWidth : 0 }}
         className={cn(
           // z-30 puts the panel + its left-edge shadow above the
           // TaskList's sticky column header (z-20), so the shadow
@@ -136,13 +146,13 @@ export default function ProjectView() {
           "relative z-30 shrink-0 overflow-hidden border-l bg-background",
           // Transition open/close only — never during a drag.
           !isResizing && "transition-[width] duration-200 ease-out",
-          panelOpen && !panelFullscreen && "shadow-[-12px_0_28px_-16px_rgba(0,0,0,0.18)]"
+          panelOpen && !showAsFullscreen && "shadow-[-12px_0_28px_-16px_rgba(0,0,0,0.18)]"
         )}
       >
         {/* Inner is locked to the chosen width so content doesn't reflow
             during the open/close transition. */}
         <div style={{ width: panelWidth }} className="h-full">
-          {selectedTask && !panelFullscreen && (
+          {selectedTask && !showAsFullscreen && (
             <TaskDetailPanel
               key={selectedTask.id}
               task={selectedTask}
@@ -159,7 +169,7 @@ export default function ProjectView() {
           panel's outer-left edge without being clipped by the aside's
           overflow-hidden. The 8px hit target centers on the edge; the 1px
           visible indicator sits exactly on it. Hidden while fullscreen. */}
-      {panelOpen && !panelFullscreen && (
+      {panelOpen && !showAsFullscreen && (
         <button
           type="button"
           aria-label="Resize panel"
@@ -180,8 +190,10 @@ export default function ProjectView() {
       )}
 
       {/* Fullscreen overlay — rendered on top of everything (above the
-          sidebar's z-10) so the task panel covers the entire viewport. */}
-      {selectedTask && panelFullscreen && (
+          sidebar's z-10) so the task panel covers the entire viewport.
+          On mobile this is the ONLY way the panel ever renders, so the
+          toggle-fullscreen control is omitted (only close is offered). */}
+      {selectedTask && showAsFullscreen && (
         <div className="fixed inset-0 z-50 bg-background">
           <TaskDetailPanel
             key={`${selectedTask.id}-fs`}
@@ -189,7 +201,9 @@ export default function ProjectView() {
             workspaceId={workspace?.id}
             onClose={closePanel}
             isFullscreen
-            onToggleFullscreen={() => setPanelFullscreen(false)}
+            onToggleFullscreen={
+              isMobile ? undefined : () => setPanelFullscreen(false)
+            }
           />
         </div>
       )}
