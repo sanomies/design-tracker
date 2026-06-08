@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 type TableName =
   | "tasks"
   | "comments"
+  | "comment_reactions"
   | "attachments"
   | "projects"
   | "sections"

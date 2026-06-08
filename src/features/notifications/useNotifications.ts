@@ -8,9 +8,19 @@ import type { Notification } from "@/types/database";
 export type NotificationView = Notification & {
   // Embedded relations from the PostgREST select below. `description` and
   // `body` are pulled in so the inbox row can render a preview of the
-  // surrounding text for mention / comment notifications.
+  // surrounding text for mention / comment notifications. `project` is
+  // pulled in so the redesigned inbox card can render the project pill
+  // (coloured dot + name) above the verb row.
   actor: { id: string; full_name: string | null } | null;
-  task: { id: string; title: string; project_id: string; description: string | null } | null;
+  task:
+    | {
+        id: string;
+        title: string;
+        project_id: string;
+        description: string | null;
+        project: { id: string; name: string; color: string | null } | null;
+      }
+    | null;
   comment: { id: string; body: string } | null;
 };
 
@@ -31,7 +41,10 @@ export function useNotifications() {
         .select(`
           *,
           actor:profiles!notifications_actor_id_fkey(id, full_name),
-          task:tasks(id, title, project_id, description),
+          task:tasks(
+            id, title, project_id, description,
+            project:projects(id, name, color)
+          ),
           comment:comments(id, body)
         `)
         .order("created_at", { ascending: false })

@@ -80,6 +80,7 @@ export type Database = {
           workspace_id: string;
           name: string;
           color: string;
+          position: number;
           created_at: string;
         };
         Insert: {
@@ -87,6 +88,7 @@ export type Database = {
           workspace_id: string;
           name: string;
           color?: string;
+          position?: number;
           created_at?: string;
         };
         Update: {
@@ -94,6 +96,7 @@ export type Database = {
           workspace_id?: string;
           name?: string;
           color?: string;
+          position?: number;
           created_at?: string;
         };
       };
@@ -339,6 +342,29 @@ export type Database = {
           accepted_by?: string | null;
         };
       };
+      comment_reactions: {
+        Row: {
+          id: string;
+          comment_id: string;
+          user_id: string;
+          emoji: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          comment_id: string;
+          user_id: string;
+          emoji: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          comment_id?: string;
+          user_id?: string;
+          emoji?: string;
+          created_at?: string;
+        };
+      };
       attachments: {
         Row: {
           id: string;
@@ -497,6 +523,7 @@ export type Task = T["tasks"]["Row"];
 export type TaskInsert = T["tasks"]["Insert"];
 export type TaskUpdate = T["tasks"]["Update"];
 export type Comment = T["comments"]["Row"];
+export type CommentReaction = T["comment_reactions"]["Row"];
 export type Attachment = T["attachments"]["Row"];
 export type WorkspaceInvitation = T["workspace_invitations"]["Row"];
 export type Notification = T["notifications"]["Row"];

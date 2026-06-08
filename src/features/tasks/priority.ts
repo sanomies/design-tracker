@@ -1,9 +1,21 @@
 import type { TaskPriority } from "@/types/database";
 
 export const PRIORITIES: { value: TaskPriority; label: string; className: string }[] = [
-  { value: "low", label: "Low", className: "bg-slate-100 text-slate-700 border-slate-200" },
-  { value: "medium", label: "Medium", className: "bg-amber-100 text-amber-800 border-amber-200" },
-  { value: "high", label: "High", className: "bg-rose-100 text-rose-800 border-rose-200" },
+  {
+    value: "low",
+    label: "Low",
+    className: "bg-[#EDF2F4] text-foreground border-transparent",
+  },
+  {
+    value: "medium",
+    label: "Medium",
+    className: "bg-[#FFE500] text-black border-transparent",
+  },
+  {
+    value: "high",
+    label: "High",
+    className: "bg-[#FF2B3A] text-white border-transparent",
+  },
 ];
 
 export function priorityMeta(priority: TaskPriority | null | undefined) {

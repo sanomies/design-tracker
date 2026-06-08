@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Circle, Search, X } from "lucide-react";
+import { Check, Circle } from "lucide-react";
 
+import { IconSearch, IconX } from "@/components/icons/figma";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { avatarColor } from "@/lib/avatarColor";
 import { cn } from "@/lib/utils";
-import { projectColorClass } from "@/features/projects/colors";
+import { resolveProjectColor } from "@/features/projects/colors";
 import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
 import type { Profile } from "@/types/database";
 
@@ -106,10 +107,9 @@ export function TaskSearchCombobox({
   };
 
   return (
-    <div ref={containerRef} className="relative w-72">
-      <Search
-        className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none"
-        aria-hidden
+    <div ref={containerRef} className="relative w-full max-w-[400px]">
+      <IconSearch
+        className="absolute left-4 top-1/2 -translate-y-1/2 h-6 w-6 text-[#708597] pointer-events-none"
       />
       <Input
         ref={inputRef}
@@ -121,8 +121,8 @@ export function TaskSearchCombobox({
         onFocus={() => setOpen(true)}
         onClick={() => setOpen(true)}
         onKeyDown={onInputKeyDown}
-        placeholder="Search tasks…"
-        className="h-8 pl-7 pr-7 text-sm"
+        placeholder="Search"
+        className="h-10 pl-12 pr-9 text-sm rounded-full border-[#DEDFE0] bg-white placeholder:text-[#708597] focus-visible:ring-1 focus-visible:ring-offset-0"
         aria-label="Search tasks"
       />
       {query && (
@@ -132,10 +132,10 @@ export function TaskSearchCombobox({
             setQuery("");
             inputRef.current?.focus();
           }}
-          className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent"
+          className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center rounded-full text-[#708597] hover:text-foreground hover:bg-[#EDF2F4]"
           aria-label="Clear search"
         >
-          <X className="h-3.5 w-3.5" />
+          <IconX className="h-4 w-4" />
         </button>
       )}
 
@@ -229,7 +229,8 @@ function ResultRow({
         {row.project && (
           <div className="text-xs text-muted-foreground inline-flex items-center gap-1 truncate">
             <span
-              className={cn("h-2 w-2 rounded-full", projectColorClass(row.project.color))}
+              className="h-2 w-2 rounded-full shrink-0"
+              style={{ backgroundColor: resolveProjectColor(row.project.color) }}
               aria-hidden
             />
             <span className="truncate">{row.project.name}</span>

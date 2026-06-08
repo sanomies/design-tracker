@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { toast } from "sonner";
-import { Download, MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Download, Pencil, Trash2 } from "lucide-react";
+
+import {
+  IconMessageCircle,
+  IconMoreHorizontal,
+  IconSmilePlus,
+} from "@/components/icons/figma";
 
 import {
   AlertDialog,
@@ -39,14 +45,19 @@ import {
 } from "@/components/rich-text/uploadEditorImage";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
-import type { Comment, Profile } from "@/types/database";
+import type { Comment, CommentReaction, Profile } from "@/types/database";
 
+import { ReactionPicker } from "./ReactionPicker";
 import {
   useComments,
   useCreateComment,
   useDeleteComment,
   useUpdateComment,
 } from "./useComments";
+import {
+  useCommentReactions,
+  useToggleCommentReaction,
+} from "./useReactions";
 
 function initials(name: string | null | undefined): string {
   if (!name) return "?";
@@ -70,22 +81,45 @@ function authorName(authorId: string | null, members: Profile[], selfId: string 
 export function CommentList({
   taskId,
   workspaceId,
+  hideComposer = false,
 }: {
   taskId: string;
   workspaceId: string | undefined;
+  /** When true, render the comment list without the inline composer. Use
+   *  when the composer is rendered elsewhere (e.g. as a sticky panel
+   *  footer in TaskDetailPanel). */
+  hideComposer?: boolean;
 }) {
   const { user } = useAuth();
   const { data: members = [] } = useWorkspaceMembers(workspaceId);
   const { data: comments, isLoading } = useComments(taskId);
-  const createComment = useCreateComment(taskId);
+  const { data: reactions = [] } = useCommentReactions(taskId);
+  const toggleReaction = useToggleCommentReaction(taskId);
   const updateComment = useUpdateComment(taskId);
   const deleteComment = useDeleteComment(taskId);
 
+  // Pre-bucket reactions by comment_id so each CommentRow doesn't re-filter
+  // the full array on every render.
+  const reactionsByComment = new Map<string, CommentReaction[]>();
+  for (const r of reactions) {
+    const list = reactionsByComment.get(r.comment_id);
+    if (list) list.push(r);
+    else reactionsByComment.set(r.comment_id, [r]);
+  }
+
   return (
-    <div className="space-y-3">
-      <h3 className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-        <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-        Comments {comments && comments.length > 0 ? `(${comments.length})` : ""}
+    <div className="space-y-4">
+      <h3 className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-foreground">
+        <IconMessageCircle className="h-[18px] w-[18px] text-foreground" />
+        Comments
+        {comments && comments.length > 0 && (
+          <span
+            className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-foreground px-1.5 text-[9px] font-bold text-background"
+            aria-hidden
+          >
+            {comments.length}
+          </span>
+        )}
       </h3>
 
       {isLoading ? (
@@ -94,7 +128,7 @@ export function CommentList({
           <Skeleton className="h-12 w-3/4" />
         </div>
       ) : comments && comments.length > 0 ? (
-        <ul className="space-y-3">
+        <ul className="divide-y divide-[#DEDFE0]">
           {comments.map((c) => (
             <CommentRow
               key={c.id}
@@ -102,6 +136,10 @@ export function CommentList({
               members={members}
               selfId={user?.id}
               taskId={taskId}
+              reactions={reactionsByComment.get(c.id) ?? []}
+              onToggleReaction={(emoji) =>
+                toggleReaction.mutate({ commentId: c.id, emoji })
+              }
               onDeleteImage={async (src) => {
                 const nextBody = removeImageFromHtml(c.body, src);
                 await updateComment.mutateAsync({ commentId: c.id, body: nextBody });
@@ -130,16 +168,14 @@ export function CommentList({
         <p className="text-xs text-muted-foreground">No comments yet.</p>
       )}
 
-      <Composer
-        members={members}
-        taskId={taskId}
-        disabled={!user || createComment.isPending}
-        onPost={async (html) => {
-          await createComment.mutateAsync(html);
-        }}
-        // Reset whenever the task changes so we don't carry a draft across tasks.
-        key={taskId}
-      />
+      {!hideComposer && (
+        <CommentComposer
+          taskId={taskId}
+          workspaceId={workspaceId}
+          // Reset whenever the task changes so we don't carry a draft across tasks.
+          key={taskId}
+        />
+      )}
     </div>
   );
 }
@@ -149,6 +185,8 @@ function CommentRow({
   members,
   selfId,
   taskId,
+  reactions,
+  onToggleReaction,
   onDeleteImage,
   onEdit,
   onDelete,
@@ -157,6 +195,8 @@ function CommentRow({
   members: Profile[];
   selfId: string | undefined;
   taskId: string;
+  reactions: CommentReaction[];
+  onToggleReaction: (emoji: string) => void;
   onDeleteImage: (src: string) => Promise<void>;
   onEdit: (commentId: string, body: string) => Promise<void>;
   onDelete: (commentId: string) => Promise<void>;
@@ -235,19 +275,16 @@ function CommentRow({
     }
   };
 
-  // Cmd/Ctrl+Enter to save, Escape to cancel — scoped to this row's editor
-  // via a data attribute so the post composer at the bottom keeps its own
-  // shortcut handler.
+  // Escape to cancel the inline edit. Save now goes through the visible
+  // "Save" button only — keeps the interaction model uniform with the
+  // sticky composer at the bottom, which also dropped Cmd+Enter.
   useEffect(() => {
     if (!isEditing) return;
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const inside = target?.closest(`[data-comment-edit="${comment.id}"]`);
       if (!inside) return;
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        e.preventDefault();
-        void saveEdit();
-      } else if (e.key === "Escape") {
+      if (e.key === "Escape") {
         e.preventDefault();
         cancelEdit();
       }
@@ -270,103 +307,132 @@ function CommentRow({
   };
 
   return (
-    <li className="group/comment flex gap-2 rounded-md bg-white p-3 shadow-sm">
-      <Avatar className="h-7 w-7 shrink-0">
-        <AvatarFallback className={cn("text-[10px]", avatarColor(comment.author_id))}>
-          {initials(authorName(comment.author_id, members, selfId))}
-        </AvatarFallback>
-      </Avatar>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2">
-          <span className="text-sm font-medium truncate">
-            {authorName(comment.author_id, members, selfId)}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {formatDistanceToNow(parseISO(comment.created_at), { addSuffix: true })}
-          </span>
-          {showActionMenu && !isEditing && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+    <li className="group/comment flex flex-col gap-2 py-2">
+      <div className="flex items-center gap-2">
+        <Avatar className="h-6 w-6 shrink-0">
+          <AvatarFallback className={cn("text-[10px]", avatarColor(comment.author_id))}>
+            {initials(authorName(comment.author_id, members, selfId))}
+          </AvatarFallback>
+        </Avatar>
+        <span className="text-xs font-semibold truncate">
+          {authorName(comment.author_id, members, selfId)}
+        </span>
+        <span className="text-xs text-[#708597]">
+          {formatDistanceToNow(parseISO(comment.created_at), { addSuffix: true })}
+        </span>
+        {!isEditing && (
+          <div className="ml-auto flex items-center gap-2">
+            {/* Author/owner actions (edit/delete) and bulk download all live
+                behind a separate MoreHorizontal trigger, only shown when
+                there's something to put in it. Keeps the SmilePlus icon
+                purely for reactions, matching the Figma. */}
+            {showActionMenu && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-[#708597] hover:text-foreground opacity-0 group-hover/comment:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+                    aria-label="Comment actions"
+                  >
+                    <IconMoreHorizontal className="h-[18px] w-[18px]" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {isAuthor && (
+                    <DropdownMenuItem onSelect={startEdit}>
+                      <Pencil className="mr-2 h-3.5 w-3.5" />
+                      Edit comment
+                    </DropdownMenuItem>
+                  )}
+                  {hasMultipleItems && (
+                    <DropdownMenuItem onSelect={() => void downloadAll()}>
+                      <Download className="mr-2 h-3.5 w-3.5" />
+                      {downloadLabel}
+                    </DropdownMenuItem>
+                  )}
+                  {isAuthor && (
+                    <DropdownMenuItem
+                      onSelect={() => setConfirmDeleteOpen(true)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-3.5 w-3.5" />
+                      Delete comment
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {/* SmilePlus = add emoji reaction. Always visible on hover for
+                any project member; the picker writes via toggleReaction. */}
+            <ReactionPicker
+              onPick={(emoji) => onToggleReaction(emoji)}
+              trigger={
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 ml-auto opacity-0 group-hover/comment:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity"
-                  aria-label="Comment actions"
+                  className="h-6 w-6 text-[#708597] hover:text-foreground opacity-0 group-hover/comment:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+                  aria-label="Add reaction"
                 >
-                  <MoreHorizontal className="h-3.5 w-3.5" />
+                  <IconSmilePlus className="h-[18px] w-[18px]" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {isAuthor && (
-                  <DropdownMenuItem onSelect={startEdit}>
-                    <Pencil className="mr-2 h-3.5 w-3.5" />
-                    Edit comment
-                  </DropdownMenuItem>
-                )}
-                {hasMultipleItems && (
-                  <DropdownMenuItem onSelect={() => void downloadAll()}>
-                    <Download className="mr-2 h-3.5 w-3.5" />
-                    {downloadLabel}
-                  </DropdownMenuItem>
-                )}
-                {isAuthor && (
-                  <DropdownMenuItem
-                    onSelect={() => setConfirmDeleteOpen(true)}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <Trash2 className="mr-2 h-3.5 w-3.5" />
-                    Delete comment
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-
-        {isEditing ? (
-          <div data-comment-edit={comment.id} className="mt-1 space-y-2">
-            <RichTextEditor
-              value={editValue}
-              onChange={setEditValue}
-              members={members}
-              placeholder="Edit comment…"
-              minHeight="60px"
-              autoFocus
-              onUploadImage={(file) => uploadEditorImage(file, taskId)}
-              onUploadFile={(file) => uploadEditorFile(file, taskId)}
+              }
             />
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={cancelEdit}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void saveEdit()}
-                disabled={
-                  saving ||
-                  isEmptyHTML(editValue) ||
-                  editValue === comment.body
-                }
-              >
-                Save
-              </Button>
-            </div>
           </div>
-        ) : (
-          <RichTextContent
-            html={comment.body}
-            className="mt-0.5 comment-body"
-            onDeleteImage={isAuthor ? handleDeleteImage : undefined}
-          />
         )}
       </div>
+
+      {isEditing ? (
+        <div data-comment-edit={comment.id} className="pl-8 space-y-2">
+          <RichTextEditor
+            value={editValue}
+            onChange={setEditValue}
+            members={members}
+            placeholder="Edit comment…"
+            minHeight="60px"
+            autoFocus
+            onUploadImage={(file) => uploadEditorImage(file, taskId)}
+            onUploadFile={(file) => uploadEditorFile(file, taskId)}
+          />
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={cancelEdit}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void saveEdit()}
+              disabled={
+                saving ||
+                isEmptyHTML(editValue) ||
+                editValue === comment.body
+              }
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="pl-8 space-y-2">
+          <RichTextContent
+            html={comment.body}
+            className="text-xs comment-body"
+            onDeleteImage={isAuthor ? handleDeleteImage : undefined}
+          />
+          <CommentReactions
+            reactions={reactions}
+            selfId={selfId}
+            members={members}
+            onToggle={onToggleReaction}
+          />
+        </div>
+      )}
 
       <AlertDialog
         open={!!pendingDeleteSrc}
@@ -417,17 +483,18 @@ function CommentRow({
   );
 }
 
-function Composer({
-  members,
+export function CommentComposer({
   taskId,
-  disabled,
-  onPost,
+  workspaceId,
 }: {
-  members: Profile[];
   taskId: string;
-  disabled: boolean;
-  onPost: (html: string) => Promise<void>;
+  workspaceId: string | undefined;
 }) {
+  const { user } = useAuth();
+  const { data: members = [] } = useWorkspaceMembers(workspaceId);
+  const createComment = useCreateComment(taskId);
+  const disabled = !user || createComment.isPending;
+
   const [value, setValue] = useState("");
   const valueRef = useRef(value);
   valueRef.current = value;
@@ -436,55 +503,112 @@ function Composer({
     const html = valueRef.current;
     if (isEmptyHTML(html)) return;
     try {
-      await onPost(html);
+      await createComment.mutateAsync(html);
       setValue("");
     } catch {
       // Toast already fired.
     }
   };
 
-  // Cmd/Ctrl+Enter submits. Plain Enter inserts a newline (TipTap default).
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        const target = e.target as HTMLElement | null;
-        // Only fire if focus is inside this composer's editor. We tag the
-        // wrapper with data-composer so we can scope without a ref to PM.
-        const inside = target?.closest("[data-composer='comments']");
-        if (!inside) return;
-        e.preventDefault();
-        void post();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const empty = isEmptyHTML(value);
 
+  // Identity for the leading avatar — mirrors Sidebar's user-card logic.
+  const fullName =
+    (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? "You";
+  const userInitials = initials(fullName);
+
   return (
-    <div data-composer="comments" className="space-y-2">
-      <RichTextEditor
-        value={value}
-        onChange={setValue}
-        members={members}
-        placeholder="Write a comment… @ to mention"
-        minHeight="60px"
-        onUploadImage={(file) => uploadEditorImage(file, taskId)}
-        onUploadFile={(file) => uploadEditorFile(file, taskId)}
-      />
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] text-muted-foreground">
-          <kbd className="rounded border bg-muted px-1">⌘</kbd>
-          <span className="mx-1">+</span>
-          <kbd className="rounded border bg-muted px-1">Enter</kbd>
-          <span className="ml-1">to post</span>
-        </p>
-        <Button size="sm" onClick={post} disabled={disabled || empty}>
-          Post
-        </Button>
+    <div data-composer="comments" className="flex items-start gap-2">
+      <Avatar className="h-6 w-6 shrink-0">
+        <AvatarFallback className={cn("text-[10px]", avatarColor(user?.id))}>
+          {userInitials}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0 space-y-2">
+        <RichTextEditor
+          value={value}
+          onChange={setValue}
+          members={members}
+          placeholder="Add a comment"
+          minHeight="32px"
+          className="rounded-lg border-[#DEDFE0] shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.1)]"
+          onUploadImage={(file) => uploadEditorImage(file, taskId)}
+          onUploadFile={(file) => uploadEditorFile(file, taskId)}
+        />
+        {!empty && (
+          <div className="flex items-center justify-end">
+            <Button size="sm" onClick={post} disabled={disabled}>
+              Post
+            </Button>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Pills at the bottom of a comment showing each distinct emoji and how
+ * many people reacted with it. Clicking a pill toggles the current user's
+ * own reaction on/off; the pill is outlined darker when the user is one
+ * of the reactors. Tooltip lists the reactor names.
+ */
+function CommentReactions({
+  reactions,
+  selfId,
+  members,
+  onToggle,
+}: {
+  reactions: CommentReaction[];
+  selfId: string | undefined;
+  members: Profile[];
+  onToggle: (emoji: string) => void;
+}) {
+  if (reactions.length === 0) return null;
+
+  // Group reactions by emoji, preserving first-seen order so the pills
+  // don't reshuffle as new reactions arrive.
+  const groups = new Map<string, CommentReaction[]>();
+  for (const r of reactions) {
+    const list = groups.get(r.emoji);
+    if (list) list.push(r);
+    else groups.set(r.emoji, [r]);
+  }
+
+  const memberName = (id: string) =>
+    id === selfId
+      ? "You"
+      : members.find((m) => m.id === id)?.full_name ?? "Someone";
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {[...groups.entries()].map(([emoji, rows]) => {
+        const mine = !!selfId && rows.some((r) => r.user_id === selfId);
+        const tooltip = rows.map((r) => memberName(r.user_id)).join(", ");
+        return (
+          <button
+            key={emoji}
+            type="button"
+            onClick={() => onToggle(emoji)}
+            title={`${tooltip} reacted with ${emoji}`}
+            className={cn(
+              "h-6 inline-flex items-center gap-1 rounded border px-1.5 transition-colors",
+              mine
+                ? "border-foreground/40 bg-white"
+                : "border-[#DEDFE0] bg-white hover:border-foreground/30"
+            )}
+            aria-pressed={mine}
+            aria-label={`${rows.length} ${rows.length === 1 ? "reaction" : "reactions"} with ${emoji}. Click to toggle yours.`}
+          >
+            <span className="text-base leading-none">{emoji}</span>
+            {rows.length > 1 && (
+              <span className="text-[11px] font-medium text-[#708597]">
+                {rows.length}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
