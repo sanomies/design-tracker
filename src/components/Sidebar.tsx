@@ -56,7 +56,7 @@ export function Sidebar() {
           <img
             src={osanoLogo}
             alt="oSano"
-            className="h-[22px] w-auto shrink-0"
+            className="h-[30px] w-auto shrink-0"
           />
           <div className="w-full">
             <InboxLink />
