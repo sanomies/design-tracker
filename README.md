@@ -1,6 +1,6 @@
 # Design Tracker
 
-A simplified Asana-style task manager built on Supabase. Vite + React + TypeScript + Tailwind + shadcn/ui on the front, Postgres + Auth + Storage on the back, with RLS doing the access control.
+A simplified task manager built on Supabase. Vite + React + TypeScript + Tailwind + shadcn/ui on the front, Postgres + Auth + Storage on the back, with RLS doing the access control.
 
 ## Stack
 
