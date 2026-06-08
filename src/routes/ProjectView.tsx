@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProjectLetterPill } from "@/features/projects/ProjectRow";
 import { useProjects } from "@/features/projects/useProjects";
+import { MobileTaskList } from "@/features/tasks/MobileTaskList";
 import { TaskDetailPanel } from "@/features/tasks/TaskDetailPanel";
 import { TaskList } from "@/features/tasks/TaskList";
 import { TaskSearchCombobox } from "@/features/tasks/TaskSearchCombobox";
@@ -125,9 +126,17 @@ export default function ProjectView() {
 
         {/* TaskList owns its own scrolling so the Done section can stay
             docked at the bottom. Outer wrapper just needs to be a flex
-            child with min-h-0 so its children can shrink. */}
+            child with min-h-0 so its children can shrink. Mobile uses a
+            separate component (pinned Name + horizontal-scroll metadata)
+            — switching at this level so the breakpoint flip mounts/
+            unmounts entirely separate trees instead of changing the
+            shared TaskList's hook count mid-render. */}
         <div className="flex-1 min-h-0">
-          <TaskList projectId={projectId} workspaceId={workspace?.id} />
+          {isMobile ? (
+            <MobileTaskList projectId={projectId} workspaceId={workspace?.id} />
+          ) : (
+            <TaskList projectId={projectId} workspaceId={workspace?.id} />
+          )}
         </div>
       </section>
 
@@ -192,9 +201,19 @@ export default function ProjectView() {
       {/* Fullscreen overlay — rendered on top of everything (above the
           sidebar's z-10) so the task panel covers the entire viewport.
           On mobile this is the ONLY way the panel ever renders, so the
-          toggle-fullscreen control is omitted (only close is offered). */}
+          toggle-fullscreen control is omitted (only close is offered).
+          The mobile overlay stops just above the 56px bottom tab bar
+          (+ safe area) so the nav stays visible and the user can switch
+          to Inbox / My Tasks / Search without first closing the task. */}
       {selectedTask && showAsFullscreen && (
-        <div className="fixed inset-0 z-50 bg-background">
+        <div
+          className={cn(
+            "fixed inset-x-0 top-0 z-50 bg-background",
+            isMobile
+              ? "bottom-[calc(3.5rem+env(safe-area-inset-bottom))]"
+              : "bottom-0"
+          )}
+        >
           <TaskDetailPanel
             key={`${selectedTask.id}-fs`}
             task={selectedTask}
