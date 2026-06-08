@@ -3,12 +3,17 @@ import { useSearchParams } from "react-router-dom";
 import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { Task } from "@/types/database";
 
-import { useCreateTask, useDeleteTask, useTasks, useUpdateTask } from "./useTasks";
+import { TaskCheckbox } from "./TaskCheckbox";
+import {
+  useCreateTask,
+  useTasks,
+  useUndoableDeleteTask,
+  useUpdateTask,
+} from "./useTasks";
 
 export function SubtaskList({ parentTask }: { parentTask: Task }) {
   const { data: tasks } = useTasks(parentTask.project_id);
@@ -70,7 +75,7 @@ export function SubtaskList({ parentTask }: { parentTask: Task }) {
 
 function SubtaskRow({ subtask }: { subtask: Task }) {
   const updateTask = useUpdateTask(subtask.project_id);
-  const deleteTask = useDeleteTask(subtask.project_id);
+  const undoableDeleteTask = useUndoableDeleteTask(subtask.project_id);
   const [, setSearchParams] = useSearchParams();
 
   const done = subtask.status === "done";
@@ -105,12 +110,12 @@ function SubtaskRow({ subtask }: { subtask: Task }) {
       role="button"
       tabIndex={0}
     >
-      <Checkbox
+      <TaskCheckbox
         checked={done}
         onCheckedChange={toggleDone}
         onClick={(e) => e.stopPropagation()}
         aria-label={done ? "Mark incomplete" : "Mark complete"}
-        className="border-muted-foreground/40 hover:border-emerald-500 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500 data-[state=checked]:text-white transition-colors"
+        className="h-[18px] w-[18px]"
       />
       <span
         className={cn(
@@ -126,7 +131,7 @@ function SubtaskRow({ subtask }: { subtask: Task }) {
         className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
         onClick={(e) => {
           e.stopPropagation();
-          deleteTask.mutate(subtask.id);
+          undoableDeleteTask(subtask);
         }}
         aria-label={`Delete ${subtask.title}`}
       >

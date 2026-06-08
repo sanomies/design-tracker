@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
   Check,
-  ChevronDown,
-  Plus,
 } from "lucide-react";
+
+import {
+  IconChevronDown,
+  IconCirclePlus,
+  IconSection,
+} from "@/components/icons/figma";
 import {
   DndContext,
   DragOverlay,
@@ -24,14 +28,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AddSectionDialog,
@@ -40,7 +42,7 @@ import {
 } from "@/features/sections/SectionDialogs";
 import { SectionBlock } from "@/features/sections/SectionBlock";
 import { SortableSection, sectionRowId } from "@/features/sections/SortableSection";
-import { ChevronRight, GripVertical } from "lucide-react";
+import { GripVertical } from "lucide-react";
 
 import { TaskListHeader } from "./TaskListHeader";
 import { defaultFilters, matchesFilters, type Filters } from "./taskFilters";
@@ -50,8 +52,8 @@ import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
 import { SortableTaskRow } from "@/features/tasks/SortableTaskRow";
 import {
   useCreateSection,
-  useDeleteSection,
-  useRenameSection,
+  useUndoableDeleteSection,
+  useUndoableRenameSection,
   useReorderSection,
   useSections,
 } from "@/features/sections/useSections";
@@ -59,8 +61,27 @@ import { useResizableHeight } from "@/hooks/useResizableHeight";
 import { cn } from "@/lib/utils";
 import type { Section, Task } from "@/types/database";
 
+import { toast } from "sonner";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+import { TaskContextMenu } from "./TaskContextMenu";
 import { TaskRow } from "./TaskRow";
-import { useCreateTask, useTasks, useUpdateTask } from "./useTasks";
+import {
+  useCreateTask,
+  useTasks,
+  useUndoableDeleteTask,
+  useUpdateTask,
+} from "./useTasks";
 
 type DoneSort = "latest" | "oldest";
 const DONE_SORT_STORAGE_KEY = "design-tracker:done-sort";
@@ -78,10 +99,14 @@ export function TaskList({
   const { data: sections = [] } = useSections(projectId);
   const createTask = useCreateTask(projectId);
   const updateTask = useUpdateTask(projectId);
+  // Task delete uses the undoable variant: 6s toast with Undo button,
+  // DB call deferred so undo restores from cache without touching the
+  // DB (cascaded comments/subtasks stay intact).
+  const undoableDeleteTask = useUndoableDeleteTask(projectId);
   const createSection = useCreateSection(projectId);
-  const renameSection = useRenameSection(projectId);
+  const undoableRenameSection = useUndoableRenameSection(projectId);
   const reorderSection = useReorderSection(projectId);
-  const deleteSection = useDeleteSection(projectId);
+  const undoableDeleteSection = useUndoableDeleteSection(projectId);
 
   // useTasks returns the whole project tree; this view shows top-level only
   // and aggregates direct-child counts for the subtask badge on each row.
@@ -226,11 +251,6 @@ export function TaskList({
       return next;
     });
 
-  // Top inline-add (for the un-sectioned group). Always visible; the combo
-  // button focuses it.
-  const [draft, setDraft] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
   // Add-section dialog + rename/delete state
   const [addSectionOpen, setAddSectionOpen] = useState(false);
   const [renamingSection, setRenamingSection] = useState<Section | null>(null);
@@ -246,34 +266,123 @@ export function TaskList({
     setSearchParams(next, { replace: true });
   };
 
-  // `/` shortcut → focus the top inline-add input.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "/") return;
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName.toLowerCase();
-      if (tag === "input" || tag === "textarea" || target?.isContentEditable) return;
-      e.preventDefault();
-      inputRef.current?.focus();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  const submitNewTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const title = draft.trim();
-    if (!title) return;
-    setDraft("");
-    // Keep focus in the input for rapid entry; the detail panel opens
-    // alongside but doesn't pull focus.
-    inputRef.current?.focus();
+  // "Add task" → create an empty-titled task and immediately open its
+  // detail panel. The panel's title field auto-enters edit mode when the
+  // title is blank, so the user can start typing right away.
+  //
+  // Default destination is the "Unassigned" section if one exists (new
+  // projects are seeded with it, and the 0019 migration backfills it on
+  // older ones). If the user renamed/deleted it, fall back to the first
+  // section by position; if there are no sections at all, the task lands
+  // in the headerless bucket.
+  const handleAddTask = async () => {
+    const unassigned = sortedSections.find(
+      (s) => s.name.trim().toLowerCase() === "unassigned"
+    );
+    const targetSectionId =
+      unassigned?.id ?? sortedSections[0]?.id ?? null;
     try {
-      const task = await createTask.mutateAsync({ title });
+      const task = await createTask.mutateAsync({
+        title: "",
+        sectionId: targetSectionId,
+      });
       setSelectedTaskId(task.id);
     } catch {
       // Toast was already fired by the mutation's onError.
     }
+  };
+
+  // ---- Right-click context menu ----
+  // `contextMenu` carries both the task that was right-clicked and the
+  // viewport coordinates at which to anchor the menu. `pendingDelete`
+  // backs the AlertDialog confirm; the Delete action in the menu sets
+  // it, the dialog's Action button performs the actual deletion.
+  const [contextMenu, setContextMenu] = useState<
+    | { task: Task; x: number; y: number }
+    | null
+  >(null);
+  const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
+
+  const handleRowContextMenu = (e: React.MouseEvent, task: Task) => {
+    e.preventDefault();
+    setContextMenu({ task, x: e.clientX, y: e.clientY });
+  };
+
+  // Event-delegation listener attached at the document level in the
+  // CAPTURE phase, so it fires before any descendant listener (incl.
+  // dnd-kit's sortable wrapper) can interfere. We walk up from
+  // `e.target` to find the closest `[data-task-id]` element, then
+  // resolve the task by id and open the menu at the cursor.
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const rowEl = target?.closest<HTMLElement>("[data-task-id]");
+      if (!rowEl) return;
+      const taskId = rowEl.dataset.taskId;
+      if (!taskId) return;
+      const task = (tasks ?? []).find((t) => t.id === taskId);
+      if (!task) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setContextMenu({ task, x: e.clientX, y: e.clientY });
+    };
+    document.addEventListener("contextmenu", handler, { capture: true });
+    return () =>
+      document.removeEventListener("contextmenu", handler, { capture: true });
+  }, [tasks]);
+
+  const duplicateTask = async (task: Task) => {
+    try {
+      const created = await createTask.mutateAsync({
+        title: task.title,
+        sectionId: task.section_id,
+      });
+      // Copy the rest of the task's fields onto the freshly created row.
+      // useCreateTask only seeds title/section; everything else is
+      // applied as a follow-up patch so the optimistic insert still
+      // appears immediately.
+      const patch: Partial<Task> = {
+        description: task.description,
+        assignee_id: task.assignee_id,
+        due_date: task.due_date,
+        priority: task.priority,
+        publication: task.publication,
+      };
+      // Skip the patch if everything is empty — saves a no-op write.
+      if (Object.values(patch).some((v) => v !== null && v !== undefined)) {
+        updateTask.mutate({ id: created.id, patch });
+      }
+      setSelectedTaskId(created.id);
+    } catch {
+      // Toast already fired by the mutation's onError.
+    }
+  };
+
+  const toggleStatus = (task: Task) => {
+    const next = task.status === "done" ? "todo" : "done";
+    updateTask.mutate({ id: task.id, patch: { status: next } });
+  };
+
+  const copyTaskLink = async (task: Task) => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("task", task.id);
+      await navigator.clipboard.writeText(url.toString());
+      toast.success("Link copied to clipboard");
+    } catch {
+      toast.error("Couldn't copy link");
+    }
+  };
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    // The undoable delete fires the toast immediately and defers the
+    // actual DB call by 6s, so this returns synchronously. If the task
+    // being deleted is the one open in the detail panel, close it too —
+    // its row is already gone from the cache.
+    undoableDeleteTask(pendingDelete);
+    if (selectedTaskId === pendingDelete.id) setSelectedTaskId(null);
+    setPendingDelete(null);
   };
 
   // Bottom-docked Done section height.
@@ -460,6 +569,7 @@ export function TaskList({
           onSelect={() =>
             setSelectedTaskId(task.id === selectedTaskId ? null : task.id)
           }
+          onContextMenu={handleRowContextMenu}
           subtaskTotal={counts?.total ?? 0}
           subtaskDone={counts?.done ?? 0}
         />
@@ -483,22 +593,27 @@ export function TaskList({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Top: combo button beside the inline-add input, single row. */}
-      <div className="shrink-0 border-b bg-background px-3 py-3">
-        <form onSubmit={submitNewTask} className="flex items-center gap-2">
-          <AddTaskCombo
-            onAddTask={() => inputRef.current?.focus()}
-            onAddSection={() => setAddSectionOpen(true)}
-          />
-          <Input
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Add a task — press Enter   ( / to focus )"
-            className="h-9 flex-1"
-            autoComplete="off"
-          />
-        </form>
+      {/* Top action row — two pill buttons. No inline input: "Add task"
+          creates an empty task and opens its detail panel directly.
+          `pt-2` lands the 8px gap below the page header per Figma. */}
+      <div className="shrink-0 bg-background px-4 pb-4 pt-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handleAddTask}
+          disabled={createTask.isPending || !projectId}
+          className="inline-flex items-center gap-2 rounded-full bg-foreground pl-2 pr-3 py-2 text-sm font-medium text-background hover:bg-foreground/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+        >
+          <IconCirclePlus className="h-6 w-6" />
+          Add task
+        </button>
+        <button
+          type="button"
+          onClick={() => setAddSectionOpen(true)}
+          className="inline-flex items-center gap-2 rounded-full border border-[#DEDFE0] bg-white pl-2 pr-3 py-2 text-sm font-medium text-foreground hover:bg-[#EDF2F4] transition-colors shrink-0"
+        >
+          <IconSection className="h-6 w-6" />
+          Add Section
+        </button>
       </div>
 
       {isLoading ? (
@@ -509,17 +624,10 @@ export function TaskList({
         </div>
       ) : topLevel.length === 0 && sections.length === 0 ? (
         <div className="flex-1 min-h-0 flex items-center justify-center px-6 py-16 text-center text-sm text-muted-foreground">
-          No tasks yet. Use the input above to add your first one.
+          No tasks yet. Click <span className="font-semibold">Add task</span> above to create one.
         </div>
       ) : (
         <>
-          <TaskListHeader
-            workspaceId={workspaceId}
-            filters={filters}
-            onChange={setFilters}
-            sort={sort}
-            onSortChange={setSort}
-          />
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -528,6 +636,19 @@ export function TaskList({
             onDragCancel={finishDrag}
           >
             <div className="flex-1 min-h-0 overflow-y-auto">
+              {/* Header lives INSIDE the scroll container so it shares the
+                  same width as the rows below — when the scrollbar takes
+                  width, both shrink together and the column dividers stay
+                  pixel-aligned. `sticky top-0` keeps it pinned at the top. */}
+              <div className="sticky top-0 z-20">
+                <TaskListHeader
+                  workspaceId={workspaceId}
+                  filters={filters}
+                  onChange={setFilters}
+                  sort={sort}
+                  onSortChange={setSort}
+                />
+              </div>
               {/* Un-sectioned tasks first */}
               {unsectioned.length > 0 && (
                 <SectionBlock
@@ -601,13 +722,12 @@ export function TaskList({
 
           {doneTasks.length > 0 && (
             <div
-              className={cn(
-                "shrink-0 flex flex-col bg-background",
-                // Collapsed: 1px border-t matches the sidebar's footer divider.
-                // Expanded: no border — the resize handle's indicator IS the
-                // visible top edge so the drag line sits exactly on it.
-                doneCollapsed && "border-t"
-              )}
+              // Redesigned Done section per Figma: a flat gray block
+              // (`#F6F9F9`) with a single top border, full panel width
+              // — no card / rounded corners / margins. Header chevron is
+              // intentionally 24×24, larger than the 18×18 chevrons on
+              // the inline To Do / In Progress section headers.
+              className="shrink-0 flex flex-col bg-[#F6F9F9] border-t border-[#DEDFE0]"
               // When collapsed, let the wrapper auto-fit the header height;
               // when expanded, use the user-resizable height.
               style={doneCollapsed ? undefined : { height: doneHeight }}
@@ -617,46 +737,34 @@ export function TaskList({
                   type="button"
                   aria-label="Resize Done section"
                   onPointerDown={onDoneResize}
-                  className="group h-2 w-full cursor-row-resize shrink-0 focus:outline-none bg-[#F5F7FA]"
+                  className="group h-1.5 w-full cursor-row-resize shrink-0 focus:outline-none bg-transparent"
                 >
                   <span
                     className={cn(
-                      // 2px tall so it visually replaces the border-t-2 we
-                      // used to render. `bg-border` matches the idle line
-                      // colour; turns primary on hover/drag. `-mt-px` lifts
-                      // it one pixel up so it aligns with the section's
-                      // visual top edge.
-                      "block w-full h-0.5 -mt-px transition-colors",
+                      "block w-full h-0.5 transition-colors",
                       doneResizing
                         ? "bg-primary/60"
-                        : "bg-border group-hover:bg-primary/40"
+                        : "bg-transparent group-hover:bg-primary/40"
                     )}
                   />
                 </button>
               )}
-              <div
-                className={cn(
-                  "shrink-0 flex items-center gap-1 px-3 bg-[#F5F7FA] border-b",
-                  // Collapsed: match the sidebar user-info footer height.
-                  // That block's content stack (text-sm + text-xs ≈ 36px) +
-                  // inner button p-2 + outer p-2 ≈ 68px.
-                  doneCollapsed ? "h-[68px]" : "py-1.5"
-                )}
-              >
+              <div className="group shrink-0 flex items-center gap-2 mx-2 px-2 py-2 hover:bg-[#EDF2F4]/60 rounded-lg transition-colors">
                 <button
                   type="button"
                   onClick={() => setDoneCollapsed((c) => !c)}
-                  className="h-5 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground rounded"
+                  className="h-6 w-6 flex items-center justify-center text-foreground/80 hover:text-foreground rounded"
                   aria-label={doneCollapsed ? "Expand Done section" : "Collapse Done section"}
                 >
-                  {doneCollapsed ? (
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  ) : (
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  )}
+                  <IconChevronDown
+                    className={cn(
+                      "h-6 w-6 transition-transform",
+                      doneCollapsed && "-rotate-90"
+                    )}
+                  />
                 </button>
                 <h2 className="text-lg font-semibold">Done</h2>
-                <span className="text-xs text-muted-foreground ml-1">
+                <span className="text-sm text-[#708597] ml-1">
                   {doneTasks.length}
                 </span>
                 {!doneCollapsed && (
@@ -719,65 +827,59 @@ export function TaskList({
         section={renamingSection}
         open={!!renamingSection}
         onOpenChange={(open) => !open && setRenamingSection(null)}
-        onSubmit={(id, name) => renameSection.mutate({ id, name })}
+        onSubmit={(_id, name) => {
+          if (renamingSection) undoableRenameSection(renamingSection, name);
+        }}
       />
       <DeleteSectionDialog
         section={deletingSection}
         open={!!deletingSection}
         onOpenChange={(open) => !open && setDeletingSection(null)}
-        onConfirm={(id) => {
-          deleteSection.mutate(id);
+        onConfirm={() => {
+          if (deletingSection) undoableDeleteSection(deletingSection);
           setDeletingSection(null);
         }}
       />
+
+      {/* Right-click context menu — only mounted while open so its
+          document-level listeners don't run idle. */}
+      {contextMenu && (
+        <TaskContextMenu
+          task={contextMenu.task}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={() => setContextMenu(null)}
+          onDuplicate={() => void duplicateTask(contextMenu.task)}
+          onToggleStatus={() => toggleStatus(contextMenu.task)}
+          onOpen={() => setSelectedTaskId(contextMenu.task.id)}
+          onCopyLink={() => void copyTaskLink(contextMenu.task)}
+          onDelete={() => setPendingDelete(contextMenu.task)}
+        />
+      )}
+
+      <AlertDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              “{pendingDelete?.title || "Untitled task"}” will be removed
+              permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-// Split combo button at the top of the task area: primary "Add task" action
-// plus a chevron that opens a menu for "Add section".
-function AddTaskCombo({
-  onAddTask,
-  onAddSection,
-}: {
-  onAddTask: () => void;
-  onAddSection: () => void;
-}) {
-  return (
-    <div className="inline-flex h-9 rounded-md border bg-background overflow-hidden">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-full rounded-none border-r"
-        onClick={onAddTask}
-      >
-        <Plus className="h-3.5 w-3.5 mr-1" />
-        Add task
-      </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-full w-9 rounded-none"
-            aria-label="More add options"
-          >
-            <ChevronDown className="h-3.5 w-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuItem onSelect={onAddTask}>
-            <Plus className="mr-2 h-3.5 w-3.5" />
-            Add task
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onAddSection}>
-            <Plus className="mr-2 h-3.5 w-3.5" />
-            Add section
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-}

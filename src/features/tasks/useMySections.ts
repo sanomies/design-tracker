@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -8,6 +9,8 @@ import type { MyTaskSection } from "@/types/database";
 
 const mySectionsKey = (userId: string | undefined) =>
   ["my-task-sections", userId] as const;
+
+const UNDO_WINDOW_MS = 6000;
 
 export function useMySections() {
   const { user } = useAuth();
@@ -181,4 +184,76 @@ export function useDeleteMySection() {
       void qc.invalidateQueries({ queryKey: ["my-tasks"] });
     },
   });
+}
+
+// Undoable helpers ------------------------------------------------------
+//
+// Mirror the project-section undo pattern from useSections: deletes are
+// deferred (DB call held back for 6s so undo is a pure cache restore),
+// renames are immediate with reverse-apply on undo.
+
+export function useUndoableDeleteMySection() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const userId = user?.id;
+  const deleteSection = useDeleteMySection();
+  const timersRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((t) => window.clearTimeout(t));
+      timers.clear();
+    };
+  }, []);
+
+  return (section: MyTaskSection) => {
+    const key = mySectionsKey(userId);
+    const previous = qc.getQueryData<MyTaskSection[]>(key);
+    qc.setQueryData<MyTaskSection[]>(key, (old = []) =>
+      old.filter((s) => s.id !== section.id)
+    );
+
+    let undone = false;
+    const timer = window.setTimeout(() => {
+      timersRef.current.delete(timer);
+      if (!undone) deleteSection.mutate(section.id);
+    }, UNDO_WINDOW_MS);
+    timersRef.current.add(timer);
+
+    const label = section.name?.trim() || "Section";
+    toast.success(`Deleted “${label}”`, {
+      duration: UNDO_WINDOW_MS,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          undone = true;
+          window.clearTimeout(timer);
+          timersRef.current.delete(timer);
+          if (previous) qc.setQueryData(key, previous);
+        },
+      },
+    });
+  };
+}
+
+export function useUndoableRenameMySection() {
+  const renameSection = useRenameMySection();
+
+  return (section: MyTaskSection, nextName: string) => {
+    const previous = section.name;
+    const trimmed = nextName.trim();
+    if (!trimmed || trimmed === previous) return;
+
+    renameSection.mutate({ id: section.id, name: trimmed });
+    toast.success("Renamed section", {
+      duration: UNDO_WINDOW_MS,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          renameSection.mutate({ id: section.id, name: previous });
+        },
+      },
+    });
+  };
 }

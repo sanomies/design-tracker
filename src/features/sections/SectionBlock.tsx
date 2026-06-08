@@ -1,15 +1,9 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useDroppable, type DraggableSyntheticListeners } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import {
-  ChevronDown,
-  ChevronRight,
-  GripVertical,
-  MoreHorizontal,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 
+import { IconChevronDown, IconMoreHorizontal } from "@/components/icons/figma";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -113,37 +107,24 @@ export function SectionBlock({
       )}
     >
       {hasHeader && (
-        <header className="group flex items-center gap-1 px-3 py-1.5 hover:bg-[#F5F7FA] rounded-md transition-colors mx-1">
-          {section && dragListeners && (
-            <button
-              type="button"
-              {...dragListeners}
-              className="h-5 w-5 flex items-center justify-center text-muted-foreground cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity touch-none"
-              aria-label={`Drag to reorder ${section.name}`}
-              // Spacebar normally toggles checkboxes / triggers buttons. For a
-              // drag handle we want the @dnd-kit keyboard sensor to take it,
-              // so we forward keydown via the listeners and don't fire onClick.
-              onClick={(e) => e.preventDefault()}
-            >
-              <GripVertical className="h-3.5 w-3.5" />
-            </button>
-          )}
+        <header className="group flex items-center gap-2 px-2 py-2 hover:bg-[#EDF2F4]/60 rounded-md transition-colors mx-2">
           <button
             type="button"
             onClick={onToggleCollapsed}
-            className="h-5 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground rounded"
+            className="h-[18px] w-[18px] flex items-center justify-center text-foreground/80 hover:text-foreground rounded"
             aria-label={collapsed ? "Expand section" : "Collapse section"}
           >
-            {collapsed ? (
-              <ChevronRight className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronDown className="h-3.5 w-3.5" />
-            )}
+            <IconChevronDown
+              className={cn(
+                "h-[18px] w-[18px] transition-transform",
+                collapsed && "-rotate-90"
+              )}
+            />
           </button>
           <h3 className="text-lg font-semibold truncate" title={headerLabel}>
             {headerLabel}
           </h3>
-          <span className="text-xs text-muted-foreground ml-1">{tasks.length}</span>
+          <span className="text-sm text-[#708597] ml-1">{tasks.length}</span>
 
           {showActionsMenu && (
             <div className="ml-auto opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
@@ -155,7 +136,7 @@ export function SectionBlock({
                     className="h-6 w-6"
                     aria-label={`Actions for ${headerLabel}`}
                   >
-                    <MoreHorizontal className="h-3.5 w-3.5" />
+                    <IconMoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

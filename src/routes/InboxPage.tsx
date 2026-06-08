@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import DOMPurify from "dompurify";
@@ -6,19 +6,23 @@ import {
   AtSign,
   Bell,
   CheckCircle2,
-  MessageSquare,
+  MessageCircle,
   Trash2,
   UserCheck,
   UserMinus,
   UserPlus,
+  X,
 } from "lucide-react";
 
 import type { NotificationType } from "@/types/database";
 
+import { IconSearch } from "@/components/icons/figma";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { avatarColor } from "@/lib/avatarColor";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { resolveProjectColor } from "@/features/projects/colors";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
@@ -50,8 +54,6 @@ export default function InboxPage() {
   const selectedTask = tasks?.find((t) => t.id === selectedTaskId) ?? null;
   const panelOpen = selectedTask !== null;
 
-  // Same persisted-width hook as ProjectView so the panel width preference
-  // is shared across surfaces.
   const { width: panelWidth, isResizing, onPointerDown } = useResizablePanel({
     defaultWidth: 600,
     min: 360,
@@ -84,13 +86,31 @@ export default function InboxPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelOpen, searchParams]);
 
+  // Local search — filters across actor name, task/workspace title, and
+  // project name. Strictly client-side; the list is capped at 50 items
+  // by the underlying query, so a naive `.includes` loop is fine.
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const list = notifications ?? [];
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((n) => {
+      const data = (n.data ?? {}) as { task_title?: string; workspace_name?: string };
+      const title =
+        n.task?.title ?? data.task_title ?? data.workspace_name ?? "";
+      const actor = n.actor?.full_name ?? "";
+      const projectName = n.task?.project?.name ?? "";
+      return (
+        title.toLowerCase().includes(q) ||
+        actor.toLowerCase().includes(q) ||
+        projectName.toLowerCase().includes(q)
+      );
+    });
+  }, [notifications, query]);
+
   const onSelect = (n: NotificationView) => {
     if (!n.read_at) markRead.mutate(n.id);
-    // Only notifications that still have a live task can open the panel.
-    // `deleted` and `invite_accepted` carry context in `data` and have no
-    // task to navigate to.
     if (!n.task_id) return;
-    // Toggle: clicking the same task's notification again closes the panel.
     setSelectedTaskId(n.task_id === selectedTaskId ? null : n.task_id);
   };
 
@@ -104,34 +124,50 @@ export default function InboxPage() {
   return (
     <div className="relative h-full flex">
       <section className="flex-1 min-w-0 flex flex-col">
-        <header className="border-b px-6 h-14 flex items-center justify-between shrink-0">
-          <h1 className="text-base font-semibold">Inbox</h1>
+        {/* Sticky header — matches the Figma's `border-b border-r p-[16px]`
+            with the title on the left and a 400px search pill on the right.
+            Mirrors ProjectView's header so the chrome reads as one family. */}
+        <header className="shrink-0 bg-white border-b border-[#DEDFE0] p-4 flex items-center gap-3">
+          <div className="flex items-center gap-2 py-2 flex-1 min-w-0">
+            <h1 className="text-lg font-semibold leading-tight">Inbox</h1>
+            {unreadCount > 0 && (
+              <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-foreground px-1.5 text-[12px] font-bold text-background">
+                {unreadCount}
+              </span>
+            )}
+          </div>
           {unreadCount > 0 && (
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 text-xs"
+              className="text-xs text-[#708597] hover:text-foreground"
               onClick={() => markAllRead.mutate()}
             >
               Mark all read
             </Button>
           )}
+          <InboxSearch value={query} onChange={setQuery} />
         </header>
 
-        <div className="flex-1 overflow-y-auto">
+        {/* Body — gray surface holding white rounded notification cards. */}
+        <div className="flex-1 overflow-y-auto bg-[#EDF2F4] p-4">
           {isLoading ? (
-            <div className="p-4 space-y-2">
-              <Skeleton className="h-16 w-full" />
-              <Skeleton className="h-16 w-full" />
-              <Skeleton className="h-16 w-3/4" />
+            <div className="space-y-2">
+              <Skeleton className="h-24 w-full rounded-2xl" />
+              <Skeleton className="h-24 w-full rounded-2xl" />
+              <Skeleton className="h-24 w-3/4 rounded-2xl" />
             </div>
           ) : !notifications || notifications.length === 0 ? (
             <EmptyInbox />
+          ) : filtered.length === 0 ? (
+            <p className="py-12 text-center text-sm text-[#708597]">
+              No notifications match “{query}”.
+            </p>
           ) : (
-            <ul>
-              {notifications.map((n) => (
-                <NotificationRow
+            <ul className="space-y-2">
+              {filtered.map((n) => (
+                <NotificationCard
                   key={n.id}
                   notification={n}
                   active={!!n.task_id && n.task_id === selectedTaskId}
@@ -165,8 +201,6 @@ export default function InboxPage() {
         </div>
       </aside>
 
-      {/* Resize handle outside the aside so it can straddle the panel's
-          outer-left edge without being clipped by overflow-hidden. */}
       {panelOpen && (
         <button
           type="button"
@@ -192,14 +226,45 @@ export default function InboxPage() {
 
 // --- Subcomponents ----------------------------------------------------
 
-// Visual + copy mapping for each notification type. Keeping it in one place
-// makes adding new types a one-line change.
+function InboxSearch({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="relative w-[360px] max-w-full shrink-0">
+      <IconSearch className="absolute left-4 top-1/2 -translate-y-1/2 h-6 w-6 text-[#708597] pointer-events-none" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search"
+        className="h-10 pl-12 pr-9 text-sm rounded-full border-[#DEDFE0] bg-white placeholder:text-[#708597] focus-visible:ring-1 focus-visible:ring-offset-0"
+        aria-label="Search inbox"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center rounded-full text-[#708597] hover:text-foreground hover:bg-[#EDF2F4]"
+          aria-label="Clear search"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Visual + copy mapping for each notification type. Centralised so adding a
+// new type is a one-line change.
 const TYPE_META: Record<
   NotificationType,
   { icon: typeof AtSign; verb: string }
 > = {
   mention: { icon: AtSign, verb: "mentioned you in" },
-  comment: { icon: MessageSquare, verb: "commented on" },
+  comment: { icon: MessageCircle, verb: "commented on" },
   assigned: { icon: UserPlus, verb: "assigned you to" },
   unassigned: { icon: UserMinus, verb: "unassigned you from" },
   completed: { icon: CheckCircle2, verb: "completed your task" },
@@ -207,7 +272,7 @@ const TYPE_META: Record<
   invite_accepted: { icon: UserCheck, verb: "joined" },
 };
 
-function NotificationRow({
+function NotificationCard({
   notification,
   active,
   onSelect,
@@ -221,30 +286,30 @@ function NotificationRow({
   const actorName = notification.actor?.full_name ?? "Someone";
   const isUnread = !notification.read_at;
 
-  // Title source depends on type — task-bound notifications join through
-  // `task.title`; the typeless ones (deleted / invite_accepted) store the
-  // relevant string in `data`.
   const data = (notification.data ?? {}) as {
     task_title?: string;
     workspace_name?: string;
   };
+  // Task-bound notifications get their title from the joined task; the
+  // workspace-bound ones (invite_accepted) store the workspace name on
+  // `data`. Falls back to "a task" only if all sources are missing.
   const title =
-    notification.task?.title ??
-    data.task_title ??
-    data.workspace_name ??
-    "a task";
+    notification.task?.title ?? data.task_title ?? data.workspace_name ?? "a task";
 
   const meta = TYPE_META[notification.type];
   const Icon = meta.icon;
   const verb = meta.verb;
 
-  // Preview text under the task title: the comment body for comment/mention-
-  // in-comment, or the task description for mention-in-description. Other
-  // notification types don't have surrounding text worth showing.
+  // Preview text under the title — comment body for comment/mention-in-
+  // comment, task description for mention-in-description.
   const previewSource =
     notification.comment?.body ??
     (notification.type === "mention" ? notification.task?.description : null);
   const preview = previewSource ? previewText(previewSource) : null;
+
+  // Project pill — only when the notification points at a task that
+  // belongs to a project we know about.
+  const project = notification.task?.project ?? null;
 
   return (
     <li>
@@ -252,63 +317,99 @@ function NotificationRow({
         type="button"
         onClick={() => onSelect(notification)}
         className={cn(
-          "group w-full text-left flex items-start gap-3 px-6 py-3 border-b last:border-b-0 transition-colors",
+          "group w-full text-left bg-white rounded-2xl p-4 flex items-start gap-4 transition-shadow",
+          // Selected card gets a brand ring; unread gets a subtle one so
+          // the card pops against the gray surface without competing with
+          // the active state.
           active
-            ? "bg-accent"
+            ? "ring-2 ring-foreground/30"
             : isUnread
-              ? "bg-primary/5 hover:bg-primary/10"
-              : "hover:bg-muted/50"
+              ? "ring-1 ring-foreground/10 hover:ring-foreground/20"
+              : "hover:ring-1 hover:ring-foreground/10"
         )}
       >
-        <Avatar className="h-8 w-8 shrink-0">
-          <AvatarFallback className={cn("text-xs", avatarColor(notification.actor?.id))}>
-            {initials(actorName)}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex-1 min-w-0 space-y-0.5">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Icon className="h-3 w-3 shrink-0" aria-hidden />
-            <span className="truncate">
-              <span className="font-medium text-foreground">{actorName}</span> {verb}
-            </span>
-          </div>
-          <p className="text-sm font-medium truncate">{title}</p>
-          {preview && (
-            <p className="text-xs text-muted-foreground line-clamp-2 whitespace-pre-line">
-              {preview}
-            </p>
-          )}
-          <p className="text-[11px] text-muted-foreground">
-            {formatDistanceToNow(parseISO(notification.created_at), { addSuffix: true })}
-          </p>
-        </div>
+        <div className="flex flex-1 min-w-0 gap-4 max-w-[800px] mx-auto w-full">
+          <Avatar className="h-9 w-9 shrink-0">
+            <AvatarFallback
+              className={cn(
+                "text-xs font-bold",
+                avatarColor(notification.actor?.id)
+              )}
+            >
+              {initials(actorName)}
+            </AvatarFallback>
+          </Avatar>
 
-        {/* Click-target toggle: unread state is always visible (solid dot);
-            read state's outline circle reveals on hover so it doesn't
-            visually clutter rows that don't need attention. */}
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleRead(notification);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
+          <div className="flex-1 min-w-0 space-y-1">
+            {project && (
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="h-2 w-2 rounded-full shrink-0"
+                  style={{ backgroundColor: resolveProjectColor(project.color) }}
+                  aria-hidden
+                />
+                <span className="text-xs font-medium text-foreground truncate">
+                  {project.name}
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1.5 text-xs">
+              <Icon
+                className="h-[18px] w-[18px] shrink-0 text-foreground"
+                aria-hidden
+              />
+              <span className="font-semibold text-foreground truncate">
+                {actorName}
+              </span>
+              <span className="font-semibold text-[#708597] truncate">
+                {verb}
+              </span>
+            </div>
+
+            <p className="text-lg font-semibold leading-snug truncate">
+              {title}
+            </p>
+
+            {preview && (
+              <p className="text-xs text-[#708597] line-clamp-2 whitespace-pre-line">
+                {preview}
+              </p>
+            )}
+
+            <p className="text-[10px] text-[#708597]">
+              {formatDistanceToNow(parseISO(notification.created_at), {
+                addSuffix: true,
+              })}
+            </p>
+          </div>
+
+          {/* Read/unread toggle dot. Solid when unread; outlined-on-hover
+              when read so handled rows stay quiet. */}
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
               e.stopPropagation();
               onToggleRead(notification);
-            }
-          }}
-          className={cn(
-            "mt-1.5 h-2.5 w-2.5 rounded-full shrink-0 cursor-pointer transition",
-            isUnread
-              ? "bg-primary hover:bg-primary/70"
-              : "border border-muted-foreground/40 hover:border-foreground opacity-0 group-hover:opacity-100"
-          )}
-          aria-label={isUnread ? "Mark as read" : "Mark as unread"}
-          title={isUnread ? "Mark as read" : "Mark as unread"}
-        />
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                onToggleRead(notification);
+              }
+            }}
+            className={cn(
+              "mt-1 h-2.5 w-2.5 rounded-full shrink-0 cursor-pointer transition",
+              isUnread
+                ? "bg-[#3858F5] hover:bg-[#3858F5]/70"
+                : "border border-[#708597]/40 hover:border-foreground opacity-0 group-hover:opacity-100"
+            )}
+            aria-label={isUnread ? "Mark as read" : "Mark as unread"}
+            title={isUnread ? "Mark as read" : "Mark as unread"}
+          />
+        </div>
       </button>
     </li>
   );
@@ -317,11 +418,11 @@ function NotificationRow({
 function EmptyInbox() {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center px-6 py-12 gap-2">
-      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-        <Bell className="h-5 w-5 text-muted-foreground" aria-hidden />
+      <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center">
+        <Bell className="h-5 w-5 text-[#708597]" aria-hidden />
       </div>
       <p className="text-sm font-medium">You're all caught up.</p>
-      <p className="text-xs text-muted-foreground max-w-[260px]">
+      <p className="text-xs text-[#708597] max-w-[260px]">
         New mentions, assignments, and comments on your tasks will show up here.
       </p>
     </div>

@@ -1,5 +1,8 @@
-import type { ReactNode } from "react";
-import { ArrowDown, ArrowUp, Check, ChevronDown } from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { ArrowDown, ArrowUp, Check } from "lucide-react";
+
+import { IconChevronDown } from "@/components/icons/figma";
 import {
   DndContext,
   PointerSensor,
@@ -28,12 +31,15 @@ import { PUBLICATIONS, PUBLICATION_CATEGORIES } from "./publications";
 import {
   COLUMN_LABELS,
   COLUMN_MIN_WIDTHS,
+  NAME_MIN_WIDTH,
   effectiveColumnWidth,
   setColumnOrder,
   setColumnWidth,
+  setNameWidth,
   toggleSort,
   useColumnOrder,
   useColumnWidths,
+  useNameWidth,
   type ColumnId,
   type SortState,
 } from "./taskColumns";
@@ -75,25 +81,39 @@ export function TaskListHeader({
     setColumnOrder(next);
   };
 
-  return (
-    <div className="shrink-0 flex items-stretch gap-3 px-3 py-1.5 border-b bg-[#F5F7FA] text-xs font-medium text-muted-foreground">
-      {/* Checkbox spacer + Name */}
-      <span className="w-4 shrink-0 self-center" aria-hidden />
-      <span className="flex-1 min-w-0 self-center">Name</span>
+  const nameWidth = useNameWidth();
 
-      {/* Metadata columns kept together as one tight strip — `divide-x` adds
-          a 1px vertical rule between each column. The row's cells use a
-          matching sub-flex so widths and dividers stay aligned. */}
+  return (
+    <div className="shrink-0 flex items-stretch gap-2 pl-4 pr-4 py-2 bg-background text-xs font-medium text-[#708597] shadow-[0_2px_2px_rgba(0,0,0,0.06)]">
+      {/* Checkbox spacer matches the row's 18px circle. Keeps "Name"
+          pixel-aligned with the row's title text. */}
+      <span className="w-[18px] shrink-0 self-center" aria-hidden />
+
+      {/* Name is a fixed-width "column" — anchoring it (rather than
+          letting flex-1 absorb leftover space) gives the columns block a
+          stable left edge, which is what makes per-column resize feel
+          right (each column's boundary follows the cursor instead of
+          the whole block sliding). The handle on Name's right resizes
+          Name; everything to its right shifts in lockstep. */}
+      <div
+        style={{ width: nameWidth }}
+        className="shrink-0 relative self-stretch flex items-center"
+      >
+        <span className="self-center truncate">Name</span>
+        <ResizeHandle
+          currentWidth={nameWidth}
+          min={NAME_MIN_WIDTH}
+          onWidthChange={setNameWidth}
+        />
+      </div>
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={order} strategy={horizontalListSortingStrategy}>
-          {/* `-my-1.5` bleeds the strip past the header's vertical padding
-              so the dividers span the full header height and line up
-              flush with the row dividers below. */}
-          <div className="shrink-0 flex items-stretch divide-x divide-border -my-1.5">
+          <div className="shrink-0 flex items-stretch -my-2">
             {order.map((id) => (
               <SortableColumn key={id} id={id}>
                 {renderHeaderCell(id, filters, onChange, members, sort, onSortChange)}
@@ -211,7 +231,13 @@ function renderHeaderCell(
 
 // --- Sortable wrapper ------------------------------------------------
 
-function SortableColumn({ id, children }: { id: ColumnId; children: ReactNode }) {
+function SortableColumn({
+  id,
+  children,
+}: {
+  id: ColumnId;
+  children: ReactNode;
+}) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } =
     useSortable({ id });
   const widths = useColumnWidths();
@@ -232,47 +258,85 @@ function SortableColumn({ id, children }: { id: ColumnId; children: ReactNode })
       {...attributes}
       {...listeners}
     >
-      <ResizeHandle id={id} currentWidth={width} side="left" />
       {children}
-      <ResizeHandle id={id} currentWidth={width} side="right" />
+      {/* Single resize handle on this column's right edge. Resizes ONLY
+          this column — columns to its right keep their widths and
+          shift along by the same delta. Works because the Name column
+          (rendered above) is fixed-width, so the columns block has a
+          stable left edge that resize doesn't fight against. */}
+      <ResizeHandle
+        currentWidth={width}
+        min={COLUMN_MIN_WIDTHS[id]}
+        onWidthChange={(w) => setColumnWidth(id, w)}
+      />
     </div>
   );
 }
 
-// --- Column resize handle --------------------------------------------
+// --- Resize handle (reusable) ----------------------------------------
 //
-// Thin overlay on either edge of a header cell. Pointer events are
-// stopped before they reach the SortableColumn so a resize drag never
-// triggers a dnd-kit reorder. The left-side variant inverts the delta
-// so dragging outward (left) widens the column the same way dragging
-// the right handle outward (right) does.
+// Width-agnostic: takes the cell's current width, its min width, and a
+// callback to apply the new width. Sits on the cell's right edge. The
+// containing cell needs `position: relative` so the handle's `absolute
+// right-0` lands on the right edge. Pointer events are stopped before
+// reaching the SortableColumn so a resize drag never triggers a
+// dnd-kit reorder.
 
 function ResizeHandle({
-  id,
   currentWidth,
-  side,
+  min,
+  onWidthChange,
 }: {
-  id: ColumnId;
   currentWidth: number;
-  side: "left" | "right";
+  min: number;
+  onWidthChange: (next: number) => void;
 }) {
+  // Single source of truth for the ghost line's x position. Set on
+  // pointer-enter (hover preview at the column edge), updated during
+  // drag (follows the cursor, clamped to min-width), cleared on
+  // pointer-leave or pointer-up. The `isDraggingRef` flag prevents a
+  // pointer-leave triggered mid-drag from prematurely hiding the line.
+  const [ghostX, setGhostX] = useState<number | null>(null);
+  const isDraggingRef = useRef(false);
+
+  const onPointerEnter = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setGhostX(rect.left + rect.width / 2);
+  };
+
+  const onPointerLeave = () => {
+    if (isDraggingRef.current) return;
+    setGhostX(null);
+  };
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     e.preventDefault();
     const startX = e.clientX;
     const startW = currentWidth;
-    const min = COLUMN_MIN_WIDTHS[id];
-    const sign = side === "right" ? 1 : -1;
+    isDraggingRef.current = true;
+    setGhostX(e.clientX);
 
     const onMove = (ev: PointerEvent) => {
-      const next = Math.max(min, startW + (ev.clientX - startX) * sign);
-      setColumnWidth(id, next);
+      // Allowed delta: never below `min - startW` (so width never drops
+      // under its minimum). Drag-right is unbounded; the cell just keeps
+      // widening — the columns container is left-anchored so this is
+      // safe (everything to the right shifts right with it).
+      const minDelta = min - startW;
+      const requested = ev.clientX - startX;
+      const delta = Math.max(minDelta, requested);
+
+      onWidthChange(startW + delta);
+      setGhostX(startX + delta);
     };
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      isDraggingRef.current = false;
+      setGhostX(null);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -281,15 +345,27 @@ function ResizeHandle({
   };
 
   return (
-    <div
-      onPointerDown={onPointerDown}
-      onClick={(e) => e.stopPropagation()}
-      className={cn(
-        "absolute top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/40 z-10",
-        side === "right" ? "right-0 -mr-0.5" : "left-0 -ml-0.5"
-      )}
-      aria-hidden
-    />
+    <>
+      <div
+        onPointerEnter={onPointerEnter}
+        onPointerLeave={onPointerLeave}
+        onPointerDown={onPointerDown}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute top-0 bottom-0 right-0 -mr-0.5 w-1.5 cursor-col-resize hover:bg-primary/40 z-10"
+        aria-hidden
+      />
+      {ghostX !== null &&
+        createPortal(
+          // Fixed-position ghost line; `pointer-events-none` so it can't
+          // intercept the pointer-up the parent is listening for.
+          <div
+            aria-hidden
+            style={{ left: ghostX }}
+            className="fixed top-0 bottom-0 z-50 w-px bg-[#DEDFE0] pointer-events-none"
+          />,
+          document.body
+        )}
+    </>
   );
 }
 
@@ -343,7 +419,7 @@ function ColumnHeader({
                 aria-hidden
               />
             )}
-            <ChevronDown className="h-3 w-3" aria-hidden />
+            <IconChevronDown className="h-4 w-4 text-[#708597]" />
           </button>
         </PopoverTrigger>
       </div>

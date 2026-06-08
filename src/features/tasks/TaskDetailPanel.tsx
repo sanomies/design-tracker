@@ -1,14 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { format, parseISO } from "date-fns";
+import { format, isBefore, isToday, isTomorrow, parseISO, startOfDay } from "date-fns";
 import {
   ArrowUpLeft,
-  MoreHorizontal,
   Newspaper,
   Plus,
   Trash2,
-  X,
 } from "lucide-react";
+import { toast } from "sonner";
+
+import {
+  IconCalendar,
+  IconFlag,
+  IconLink,
+  IconMaximize,
+  IconMinimize,
+  IconMoreHorizontal,
+  IconSection,
+  IconUser,
+  IconX,
+} from "@/components/icons/figma";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +50,7 @@ import {
   uploadEditorImage,
 } from "@/components/rich-text/uploadEditorImage";
 import { AttachmentList } from "@/features/attachments/AttachmentList";
-import { CommentList } from "@/features/comments/CommentList";
+import { CommentComposer, CommentList } from "@/features/comments/CommentList";
 import { useSections } from "@/features/sections/useSections";
 import { SubtaskList } from "@/features/tasks/SubtaskList";
 import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
@@ -50,7 +61,12 @@ import type { Profile, Task, TaskPriority } from "@/types/database";
 import { PRIORITIES, priorityMeta } from "./priority";
 import { PublicationPickerContent } from "./PublicationPicker";
 import { getPublication } from "./publications";
-import { useDeleteTask, useTasks, useUpdateTask } from "./useTasks";
+import {
+  useTasks,
+  useUndoableDeleteTask,
+  useUndoableRenameTask,
+  useUpdateTask,
+} from "./useTasks";
 
 function initials(name: string | null | undefined): string {
   if (!name) return "?";
@@ -65,29 +81,50 @@ function initials(name: string | null | undefined): string {
 // Inline panel — no modal/backdrop. The parent (ProjectView) controls layout
 // and decides when to mount this. We render directly so the task list stays
 // visible and interactive alongside.
+type DetailPanelProps = {
+  task: Task;
+  workspaceId: string | undefined;
+  onClose: () => void;
+  /** True when the panel is currently rendered as a fullscreen overlay
+   *  by its parent. The header swaps to an inward-pointing arrows icon
+   *  when this is on. */
+  isFullscreen?: boolean;
+  /** Toggle fullscreen ↔ sidebar mode. Owned by the parent because the
+   *  layout switch happens above this component. */
+  onToggleFullscreen?: () => void;
+};
+
 export function TaskDetailPanel({
   task,
   workspaceId,
   onClose,
-}: {
-  task: Task;
-  workspaceId: string | undefined;
-  onClose: () => void;
-}) {
-  return <PanelBody task={task} workspaceId={workspaceId} onClose={onClose} />;
+  isFullscreen,
+  onToggleFullscreen,
+}: DetailPanelProps) {
+  return (
+    <PanelBody
+      task={task}
+      workspaceId={workspaceId}
+      onClose={onClose}
+      isFullscreen={isFullscreen}
+      onToggleFullscreen={onToggleFullscreen}
+    />
+  );
 }
 
 function PanelBody({
   task,
   workspaceId,
   onClose,
-}: {
-  task: Task;
-  workspaceId: string | undefined;
-  onClose: () => void;
-}) {
+  isFullscreen,
+  onToggleFullscreen,
+}: DetailPanelProps) {
   const updateTask = useUpdateTask(task.project_id);
-  const deleteTask = useDeleteTask(task.project_id);
+  // Delete + title rename both go through the undoable helpers so the
+  // user gets a 6s "Undo" toast for each (deferred delete; immediate
+  // rename with reverse-apply on undo).
+  const undoableDeleteTask = useUndoableDeleteTask(task.project_id);
+  const undoableRenameTask = useUndoableRenameTask(task.project_id);
   const { data: members } = useWorkspaceMembers(workspaceId);
   const { data: tasks } = useTasks(task.project_id);
   const { data: sections = [] } = useSections(task.project_id);
@@ -116,13 +153,26 @@ function PanelBody({
     updateTask.mutate({ id: task.id, patch });
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
+    // Undoable delete fires its toast immediately and defers the real
+    // DB call by 6s; this returns synchronously.
+    undoableDeleteTask(task);
+    setDeleteOpen(false);
+    onClose();
+  };
+
+  const copyLink = async () => {
     try {
-      await deleteTask.mutateAsync(task.id);
-      setDeleteOpen(false);
-      onClose();
+      // Always copy a link to the task in its project context, regardless
+      // of which page the panel was opened from (e.g. /my-tasks). Vite's
+      // BASE_URL keeps sub-path deploys working.
+      const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+      const url = new URL(window.location.origin + base + `/projects/${task.project_id}`);
+      url.searchParams.set("task", task.id);
+      await navigator.clipboard.writeText(url.toString());
+      toast.success("Link copied to clipboard");
     } catch {
-      // Toast already fired.
+      toast.error("Couldn't copy link");
     }
   };
 
@@ -142,16 +192,47 @@ function PanelBody({
 
   return (
     <div className="h-full flex flex-col">
-      <header className="px-4 py-3 flex items-center justify-between gap-3 shrink-0">
+      <header className="bg-white border-b border-[#DEDFE0] p-4 flex items-center justify-between gap-4 shrink-0">
         <PublicationPill
           value={task.publication}
           onChange={(publication) => update({ publication })}
         />
-        <div className="flex items-center gap-1 shrink-0">
+        {/* All header icons are 18×18 per the latest Figma. Spacing of
+            16px between them mirrors the design's `gap-[16px]`. */}
+        <div className="flex items-center gap-4 shrink-0">
+          <button
+            type="button"
+            onClick={() => void copyLink()}
+            className="h-[18px] w-[18px] inline-flex items-center justify-center text-foreground/80 hover:text-foreground rounded transition-colors"
+            aria-label="Copy link to task"
+            title="Copy link to task"
+          >
+            <IconLink className="h-[18px] w-[18px]" />
+          </button>
+          {onToggleFullscreen && (
+            <button
+              type="button"
+              onClick={onToggleFullscreen}
+              className="h-[18px] w-[18px] inline-flex items-center justify-center text-foreground/80 hover:text-foreground rounded transition-colors"
+              aria-label={isFullscreen ? "Exit fullscreen" : "Expand to fullscreen"}
+              title={isFullscreen ? "Exit fullscreen" : "Expand to fullscreen"}
+            >
+              {isFullscreen ? (
+                <IconMinimize className="h-[18px] w-[18px]" />
+              ) : (
+                <IconMaximize className="h-[18px] w-[18px]" />
+              )}
+            </button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Task actions">
-                <MoreHorizontal className="h-4 w-4" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-[18px] w-[18px] text-foreground/80 hover:text-foreground"
+                aria-label="Task actions"
+              >
+                <IconMoreHorizontal className="h-[18px] w-[18px]" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -164,9 +245,14 @@ function PanelBody({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose} aria-label="Close">
-            <X className="h-4 w-4" />
-          </Button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-[18px] w-[18px] inline-flex items-center justify-center text-foreground/80 hover:text-foreground rounded transition-colors"
+            aria-label="Close"
+          >
+            <IconX className="h-[18px] w-[18px]" />
+          </button>
         </div>
       </header>
 
@@ -175,12 +261,12 @@ function PanelBody({
             section's background extends to the bottom of the panel even
             when the content above is short. */}
         <div className="flex flex-col min-h-full">
-          <section className="px-4 pb-4 space-y-4">
+          <section className="px-4 pt-4 pb-6 space-y-6">
             {task.parent_task_id && (
               <button
                 type="button"
                 onClick={openParent}
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground max-w-full"
+                className="inline-flex items-center gap-1 text-xs text-[#708597] hover:text-foreground max-w-full"
               >
                 <ArrowUpLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 <span className="truncate">
@@ -189,30 +275,33 @@ function PanelBody({
               </button>
             )}
 
-            <TitleField task={task} onSave={(title) => update({ title })} />
+            <TitleField
+              task={task}
+              onSave={(title) => undoableRenameTask(task, title)}
+            />
 
-            <div className="divide-y">
-              <PropertyRow label="Assignee">
+            <div className="divide-y divide-[#DEDFE0]">
+              <PropertyRow label="Assignee" icon={<IconUser className="h-[18px] w-[18px] text-foreground" />}>
                 <AssigneeInline
                   members={members ?? []}
                   value={task.assignee_id}
                   onChange={(assignee_id) => update({ assignee_id })}
                 />
               </PropertyRow>
-              <PropertyRow label="Due">
+              <PropertyRow label="Due Date" icon={<IconCalendar className="h-[18px] w-[18px] text-foreground" />}>
                 <DueInline
                   value={task.due_date}
                   onChange={(due_date) => update({ due_date })}
                 />
               </PropertyRow>
-              <PropertyRow label="Priority">
+              <PropertyRow label="Priority" icon={<IconFlag className="h-[18px] w-[18px] text-foreground" />}>
                 <PriorityInline
                   value={task.priority}
                   onChange={(priority) => update({ priority })}
                 />
               </PropertyRow>
               {(sections.length > 0 || task.section_id) && (
-                <PropertyRow label="Section">
+                <PropertyRow label="Section" icon={<IconSection className="h-[18px] w-[18px] text-foreground" />}>
                   <SectionInline
                     sections={sections}
                     value={task.section_id}
@@ -256,11 +345,18 @@ function PanelBody({
             {showAttachments && <AttachmentList task={task} />}
           </section>
 
-          <section className="flex-1 border-t bg-[#F5F7FA] p-4">
-            <CommentList taskId={task.id} workspaceId={workspaceId} />
+          <section className="flex-1 border-t border-[#DEDFE0] bg-[#F6F9F9] px-4 pt-6 pb-4">
+            <CommentList taskId={task.id} workspaceId={workspaceId} hideComposer />
           </section>
         </div>
       </div>
+
+      {/* Sticky white composer footer — sits below the scrollable
+          content so the "Add a comment" input is always reachable, even
+          while scrolling through long meta/description/comment lists. */}
+      <footer className="shrink-0 border-t border-[#DEDFE0] bg-white p-4">
+        <CommentComposer key={task.id} taskId={task.id} workspaceId={workspaceId} />
+      </footer>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
@@ -286,18 +382,23 @@ function PanelBody({
 }
 
 // Table-style property row: muted label on the left, inline editable value
-// on the right. The parent applies `border-y divide-y` so a stack of these
-// reads as a thin lined table.
+// on the right. The parent applies `divide-y` so a stack of these reads as
+// a thin lined table.
 function PropertyRow({
   label,
+  icon,
   children,
 }: {
   label: string;
+  icon?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[110px_1fr] items-center gap-3 py-2.5">
-      <span className="text-sm text-muted-foreground">{label}</span>
+    <div className="grid grid-cols-[100px_1fr] items-center gap-4 py-2">
+      <span className="inline-flex items-center gap-2 text-xs font-medium text-[#708597]">
+        {icon}
+        {label}
+      </span>
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -305,11 +406,11 @@ function PropertyRow({
 
 // Em-dash placeholder used wherever a property is unset.
 function EmptyValue() {
-  return <span className="text-sm text-muted-foreground">—</span>;
+  return <span className="text-xs text-[#708597]">—</span>;
 }
 
 const PROPERTY_TRIGGER_CLASS =
-  "inline-flex items-center gap-1.5 rounded px-1 -mx-1 py-0.5 text-sm hover:bg-accent transition-colors max-w-full min-h-[28px]";
+  "inline-flex items-center gap-2 rounded px-1 -mx-1 py-0.5 text-xs hover:bg-[#EDF2F4] transition-colors max-w-full min-h-[24px]";
 
 // Outlined "+ Subtasks" / "+ Attachment" reveal pill in the body.
 function PillButton({
@@ -336,7 +437,9 @@ function PillButton({
 // Title -----------------------------------------------------------------
 
 function TitleField({ task, onSave }: { task: Task; onSave: (title: string) => void }) {
-  const [editing, setEditing] = useState(false);
+  // Newly created tasks land here with an empty title — auto-open edit mode
+  // so the user can start typing immediately, no extra click required.
+  const [editing, setEditing] = useState(task.title === "");
   const [value, setValue] = useState(task.title);
 
   useEffect(() => {
@@ -370,7 +473,7 @@ function TitleField({ task, onSave }: { task: Task; onSave: (title: string) => v
             setEditing(false);
           }
         }}
-        className="text-2xl md:text-2xl font-bold h-auto leading-tight py-2 focus-visible:ring-offset-0 focus-visible:ring-inset"
+        className="text-lg font-semibold h-auto leading-snug py-1.5 rounded-lg border-[#DEDFE0] shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.1)] focus-visible:ring-offset-0 focus-visible:ring-inset"
       />
     );
   }
@@ -379,9 +482,9 @@ function TitleField({ task, onSave }: { task: Task; onSave: (title: string) => v
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="text-2xl font-bold leading-tight text-left w-full hover:bg-muted/50 rounded px-1 -mx-1 py-0.5"
+      className="text-lg font-semibold leading-snug text-left w-full hover:bg-[#EDF2F4] rounded px-1 -mx-1 py-0.5"
     >
-      {task.title}
+      {task.title || <span className="text-[#708597]">Untitled task</span>}
     </button>
   );
 }
@@ -410,20 +513,19 @@ function DescriptionField({
   };
 
   return (
-    <div className="space-y-1.5">
-      <span className="text-sm text-muted-foreground">Description</span>
-      <div className="rounded-md border border-input">
-        <RichTextEditor
-          key={task.id}
-          value={initial}
-          onBlur={commit}
-          members={members}
-          placeholder="Add a description…"
-          minHeight="120px"
-          onUploadImage={(file) => uploadEditorImage(file, task.id)}
-          onUploadFile={(file) => uploadEditorFile(file, task.id)}
-        />
-      </div>
+    <div className="space-y-2">
+      <span className="text-xs font-medium text-[#708597]">Description</span>
+      <RichTextEditor
+        key={task.id}
+        value={initial}
+        onBlur={commit}
+        members={members}
+        placeholder="Add a description…"
+        minHeight="200px"
+        className="rounded-lg border-[#DEDFE0] shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.1)]"
+        onUploadImage={(file) => uploadEditorImage(file, task.id)}
+        onUploadFile={(file) => uploadEditorFile(file, task.id)}
+      />
     </div>
   );
 }
@@ -445,17 +547,17 @@ function PublicationPill({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-md bg-muted/60 hover:bg-muted px-3 py-1.5 text-sm font-medium transition-colors max-w-full min-h-[36px]"
+          className="inline-flex items-center gap-2 rounded-full border border-[#DEDFE0] bg-[#F6F9F9] hover:bg-[#EDF2F4] pl-2 pr-3 py-2 text-xs font-medium transition-colors max-w-full"
         >
           {current ? (
             <img
               src={current.thumbnail}
               alt=""
-              className="h-6 w-6 rounded object-cover shrink-0"
+              className="h-6 w-6 rounded-full object-cover shrink-0"
             />
           ) : (
             <span className="h-6 w-6 inline-flex items-center justify-center shrink-0">
-              <Newspaper className="h-4 w-4 text-muted-foreground" aria-hidden />
+              <Newspaper className="h-4 w-4 text-[#708597]" aria-hidden />
             </span>
           )}
           <span className="truncate">{current ? current.name : "No publication"}</span>
@@ -493,7 +595,7 @@ function AssigneeInline({
         <button type="button" className={PROPERTY_TRIGGER_CLASS}>
           {current ? (
             <>
-              <Avatar className="h-5 w-5 shrink-0">
+              <Avatar className="h-6 w-6 shrink-0">
                 <AvatarFallback className={cn("text-[10px]", avatarColor(current.id))}>
                   {initials(current.full_name)}
                 </AvatarFallback>
@@ -559,13 +661,28 @@ function DueInline({
 }) {
   const [open, setOpen] = useState(false);
   const selected = value ? parseISO(value) : undefined;
+  // Overdue = strictly before start-of-today (so a task due *today* stays
+  // neutral; it only turns red once the day has passed).
+  const isOverdue =
+    !!selected && isBefore(selected, startOfDay(new Date()));
+  // Friendly labels for the next two days; everything else falls back to
+  // the full "MMM d, yyyy" date format.
+  const label = selected
+    ? isToday(selected)
+      ? "Today"
+      : isTomorrow(selected)
+        ? "Tomorrow"
+        : format(selected, "MMM d, yyyy")
+    : null;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button type="button" className={PROPERTY_TRIGGER_CLASS}>
           {selected ? (
-            <span>{format(selected, "MMM d, yyyy")}</span>
+            <span className={cn(isOverdue && "text-destructive font-medium")}>
+              {label}
+            </span>
           ) : (
             <EmptyValue />
           )}
@@ -620,7 +737,7 @@ function PriorityInline({
           {meta ? (
             <Badge
               variant="outline"
-              className={cn("h-5 text-[10px] uppercase", meta.className)}
+              className={cn("h-5 px-2 rounded-full text-[10px] font-semibold uppercase", meta.className)}
             >
               {meta.label}
             </Badge>

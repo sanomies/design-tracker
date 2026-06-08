@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -8,6 +9,8 @@ import type { Section } from "@/types/database";
 
 const sectionsKey = (projectId: string | undefined) =>
   ["sections", projectId] as const;
+
+const UNDO_WINDOW_MS = 6000;
 
 export function useSections(projectId: string | undefined) {
   const result = useQuery({
@@ -183,4 +186,75 @@ export function useDeleteSection(projectId: string | undefined) {
       void qc.invalidateQueries({ queryKey: ["tasks", projectId] });
     },
   });
+}
+
+// Undoable helpers ------------------------------------------------------
+//
+// Same pattern as useTasks: deletes are deferred so undoing is a pure
+// cache restore (no ON-DELETE-SET-NULL cascade fires until the window
+// closes), renames hit the DB immediately and the undo path reverses
+// them by re-applying the previous name.
+
+export function useUndoableDeleteSection(projectId: string | undefined) {
+  const qc = useQueryClient();
+  const deleteSection = useDeleteSection(projectId);
+  const timersRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((t) => window.clearTimeout(t));
+      timers.clear();
+    };
+  }, []);
+
+  return (section: Section) => {
+    const key = sectionsKey(projectId);
+    const previous = qc.getQueryData<Section[]>(key);
+    qc.setQueryData<Section[]>(key, (old = []) =>
+      old.filter((s) => s.id !== section.id)
+    );
+
+    let undone = false;
+    const timer = window.setTimeout(() => {
+      timersRef.current.delete(timer);
+      if (!undone) deleteSection.mutate(section.id);
+    }, UNDO_WINDOW_MS);
+    timersRef.current.add(timer);
+
+    const label = section.name?.trim() || "Section";
+    toast.success(`Deleted “${label}”`, {
+      duration: UNDO_WINDOW_MS,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          undone = true;
+          window.clearTimeout(timer);
+          timersRef.current.delete(timer);
+          if (previous) qc.setQueryData(key, previous);
+        },
+      },
+    });
+  };
+}
+
+export function useUndoableRenameSection(projectId: string | undefined) {
+  const renameSection = useRenameSection(projectId);
+
+  return (section: Section, nextName: string) => {
+    const previous = section.name;
+    const trimmed = nextName.trim();
+    if (!trimmed || trimmed === previous) return;
+
+    renameSection.mutate({ id: section.id, name: trimmed });
+    toast.success("Renamed section", {
+      duration: UNDO_WINDOW_MS,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          renameSection.mutate({ id: section.id, name: previous });
+        },
+      },
+    });
+  };
 }

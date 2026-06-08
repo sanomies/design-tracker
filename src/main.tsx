@@ -15,7 +15,16 @@ if (!root) throw new Error("Root element #root not found in index.html");
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter basename={import.meta.env.BASE_URL}>
+      {/* Opt into the v7 transition behaviors now so we (a) don't get the
+          dev-only "Future Flag" console warnings and (b) move when v7
+          lands without a behavior shift. `v7_startTransition` wraps
+          internal route state updates in React's `startTransition`; the
+          relativeSplatPath flag fixes how relative paths resolve inside
+          splat (`*`) routes. */}
+      <BrowserRouter
+        basename={import.meta.env.BASE_URL}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <App />
       </BrowserRouter>
       <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-right" />

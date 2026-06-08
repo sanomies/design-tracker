@@ -122,6 +122,10 @@ export function BannerPicker({
     }
     if (event.key === "Escape") {
       event.preventDefault();
+      // Stop the native event from reaching the window-level Escape listener
+      // on the task panel, which would otherwise close the whole panel.
+      event.stopPropagation();
+      event.nativeEvent.stopImmediatePropagation();
       onOpenChange(false);
       return;
     }

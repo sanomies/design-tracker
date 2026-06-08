@@ -189,3 +189,61 @@ export function useColumnWidths(): WidthMap {
 export function effectiveColumnWidth(id: ColumnId, widths: WidthMap): number {
   return widths[id] ?? COLUMN_MIN_WIDTHS[id];
 }
+
+// --- Persisted Name (title) column width -----------------------------
+//
+// The Name column is special: it isn't sortable or drag-reorderable and
+// doesn't participate in the ColumnId-keyed widths above, but it IS
+// resizable. Giving it an explicit width (rather than `flex-1`) anchors
+// the rest of the columns block to a fixed left edge, which is what
+// lets per-column resize work the way users expect — each column's
+// boundary follows the cursor instead of the whole block sliding around.
+
+export const NAME_MIN_WIDTH = 200;
+export const DEFAULT_NAME_WIDTH = 480;
+const NAME_WIDTH_STORAGE_KEY = "design-tracker:task-name-column-width";
+
+function readNameWidth(): number {
+  if (typeof window === "undefined") return DEFAULT_NAME_WIDTH;
+  try {
+    const raw = localStorage.getItem(NAME_WIDTH_STORAGE_KEY);
+    if (!raw) return DEFAULT_NAME_WIDTH;
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed === "number" && Number.isFinite(parsed) && parsed > 0) {
+      return Math.max(NAME_MIN_WIDTH, Math.round(parsed));
+    }
+    return DEFAULT_NAME_WIDTH;
+  } catch {
+    return DEFAULT_NAME_WIDTH;
+  }
+}
+
+let cachedNameWidth = readNameWidth();
+const nameWidthListeners = new Set<() => void>();
+
+export function setNameWidth(width: number) {
+  const clamped = Math.max(NAME_MIN_WIDTH, Math.round(width));
+  if (clamped === cachedNameWidth) return;
+  cachedNameWidth = clamped;
+  try {
+    localStorage.setItem(NAME_WIDTH_STORAGE_KEY, JSON.stringify(clamped));
+  } catch {
+    // ignore quota / private mode
+  }
+  for (const l of nameWidthListeners) l();
+}
+
+function subscribeNameWidth(cb: () => void) {
+  nameWidthListeners.add(cb);
+  return () => {
+    nameWidthListeners.delete(cb);
+  };
+}
+
+export function useNameWidth(): number {
+  return useSyncExternalStore(
+    subscribeNameWidth,
+    () => cachedNameWidth,
+    () => cachedNameWidth
+  );
+}

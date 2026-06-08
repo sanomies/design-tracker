@@ -1,8 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { projectColorClass } from "@/features/projects/colors";
+import { ProjectLetterPill } from "@/features/projects/ProjectRow";
 import { useProjects } from "@/features/projects/useProjects";
 import { TaskDetailPanel } from "@/features/tasks/TaskDetailPanel";
 import { TaskList } from "@/features/tasks/TaskList";
@@ -55,6 +55,14 @@ export default function ProjectView() {
     max: 1000,
   });
 
+  // Fullscreen mode for the detail panel — toggled from the panel's
+  // header. Reset whenever the panel closes so reopening starts in the
+  // default sidebar layout.
+  const [panelFullscreen, setPanelFullscreen] = useState(false);
+  useEffect(() => {
+    if (!panelOpen) setPanelFullscreen(false);
+  }, [panelOpen]);
+
   const closePanel = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("task");
@@ -84,21 +92,25 @@ export default function ProjectView() {
   return (
     <div className="relative h-full flex">
       <section className="flex-1 min-w-0 flex flex-col">
-        <header className="border-b px-6 h-14 flex items-center gap-3 shrink-0">
+        {/* Header + action row are visually one block in the Figma —
+            16px outer padding with an 8px gap between the rows. The
+            action row (rendered inside TaskList) owns the 8px via its
+            own `pt-2`; the header here keeps `pb-0`. */}
+        <header className="px-4 pt-4 pb-0 flex items-center gap-3 shrink-0">
           {projectsLoading ? (
-            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-7 w-48" />
           ) : project ? (
-            <>
-              <span
-                className={cn("h-3 w-3 rounded-full", projectColorClass(project.color))}
-                aria-hidden
-              />
-              <h1 className="text-base font-semibold">{project.name}</h1>
-            </>
+            <div className="flex items-center gap-2 py-2">
+              <ProjectLetterPill color={project.color} name={project.name} />
+              <h1 className="text-lg font-semibold leading-tight">{project.name}</h1>
+            </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Project not found</p>
+            <p className="text-sm text-[#708597]">Project not found</p>
           )}
-          <div className="ml-auto">
+          {/* flex-1 + justify-end lets the search grow into all
+              remaining header width; the combobox itself caps at
+              400px and stays right-aligned within. */}
+          <div className="ml-auto flex-1 flex justify-end">
             <TaskSearchCombobox workspaceId={workspace?.id} />
           </div>
         </header>
@@ -111,25 +123,33 @@ export default function ProjectView() {
         </div>
       </section>
 
+      {/* Sidebar rendering — only used when NOT in fullscreen mode.
+          Width animates between 0 (closed) and `panelWidth` (open). */}
       <aside
-        aria-hidden={!panelOpen}
-        style={{ width: panelOpen ? panelWidth : 0 }}
+        aria-hidden={!panelOpen || panelFullscreen}
+        style={{ width: panelOpen && !panelFullscreen ? panelWidth : 0 }}
         className={cn(
-          "relative shrink-0 overflow-hidden border-l bg-background",
+          // z-30 puts the panel + its left-edge shadow above the
+          // TaskList's sticky column header (z-20), so the shadow
+          // visually wraps over the header row's right edge instead
+          // of being capped at it.
+          "relative z-30 shrink-0 overflow-hidden border-l bg-background",
           // Transition open/close only — never during a drag.
           !isResizing && "transition-[width] duration-200 ease-out",
-          panelOpen && "shadow-[-12px_0_28px_-16px_rgba(0,0,0,0.18)]"
+          panelOpen && !panelFullscreen && "shadow-[-12px_0_28px_-16px_rgba(0,0,0,0.18)]"
         )}
       >
         {/* Inner is locked to the chosen width so content doesn't reflow
             during the open/close transition. */}
         <div style={{ width: panelWidth }} className="h-full">
-          {selectedTask && (
+          {selectedTask && !panelFullscreen && (
             <TaskDetailPanel
               key={selectedTask.id}
               task={selectedTask}
               workspaceId={workspace?.id}
               onClose={closePanel}
+              isFullscreen={false}
+              onToggleFullscreen={() => setPanelFullscreen(true)}
             />
           )}
         </div>
@@ -138,8 +158,8 @@ export default function ProjectView() {
       {/* Resize handle lives OUTSIDE the aside so it can straddle the
           panel's outer-left edge without being clipped by the aside's
           overflow-hidden. The 8px hit target centers on the edge; the 1px
-          visible indicator sits exactly on it. */}
-      {panelOpen && (
+          visible indicator sits exactly on it. Hidden while fullscreen. */}
+      {panelOpen && !panelFullscreen && (
         <button
           type="button"
           aria-label="Resize panel"
@@ -157,6 +177,21 @@ export default function ProjectView() {
             )}
           />
         </button>
+      )}
+
+      {/* Fullscreen overlay — rendered on top of everything (above the
+          sidebar's z-10) so the task panel covers the entire viewport. */}
+      {selectedTask && panelFullscreen && (
+        <div className="fixed inset-0 z-50 bg-background">
+          <TaskDetailPanel
+            key={`${selectedTask.id}-fs`}
+            task={selectedTask}
+            workspaceId={workspace?.id}
+            onClose={closePanel}
+            isFullscreen
+            onToggleFullscreen={() => setPanelFullscreen(false)}
+          />
+        </div>
       )}
     </div>
   );

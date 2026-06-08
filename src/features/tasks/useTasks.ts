@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -5,6 +6,8 @@ import { useAuth } from "@/features/auth/AuthProvider";
 import { useRealtimeInvalidate } from "@/hooks/useRealtimeInvalidate";
 import { supabase } from "@/lib/supabase";
 import type { Task, TaskUpdate } from "@/types/database";
+
+const UNDO_WINDOW_MS = 6000;
 
 const tasksKey = (projectId: string | undefined) => ["tasks", projectId] as const;
 
@@ -175,4 +178,78 @@ export function useDeleteTask(projectId: string | undefined) {
       void qc.invalidateQueries({ queryKey: tasksKey(projectId) });
     },
   });
+}
+
+// Undoable helpers ------------------------------------------------------
+//
+// These wrap the existing mutations with a "show toast with Undo for N
+// seconds" interaction. Deletes are *deferred* (the DB call doesn't fire
+// until the undo window closes) so undoing is a pure cache restore —
+// cascaded deletes of comments/attachments/subtasks never happened.
+// Renames hit the DB immediately; the undo path just fires the rename
+// in reverse.
+
+export function useUndoableDeleteTask(projectId: string | undefined) {
+  const qc = useQueryClient();
+  const deleteTask = useDeleteTask(projectId);
+  const timersRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((t) => window.clearTimeout(t));
+      timers.clear();
+    };
+  }, []);
+
+  return (task: Task) => {
+    const key = tasksKey(projectId);
+    const previous = qc.getQueryData<Task[]>(key);
+    // Optimistically hide the task immediately. The undo path swaps the
+    // full previous snapshot back in; the commit path runs the real
+    // delete (which then re-applies its own optimistic removal).
+    qc.setQueryData<Task[]>(key, (old = []) => old.filter((t) => t.id !== task.id));
+
+    let undone = false;
+    const timer = window.setTimeout(() => {
+      timersRef.current.delete(timer);
+      if (!undone) deleteTask.mutate(task.id);
+    }, UNDO_WINDOW_MS);
+    timersRef.current.add(timer);
+
+    const label = task.title?.trim() || "Untitled task";
+    toast.success(`Deleted “${label}”`, {
+      duration: UNDO_WINDOW_MS,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          undone = true;
+          window.clearTimeout(timer);
+          timersRef.current.delete(timer);
+          if (previous) qc.setQueryData(key, previous);
+        },
+      },
+    });
+  };
+}
+
+export function useUndoableRenameTask(projectId: string | undefined) {
+  const updateTask = useUpdateTask(projectId);
+
+  return (task: Task, nextTitle: string) => {
+    const previous = task.title;
+    const trimmed = nextTitle.trim();
+    if (!trimmed || trimmed === previous) return;
+
+    updateTask.mutate({ id: task.id, patch: { title: trimmed } });
+    toast.success("Renamed task", {
+      duration: UNDO_WINDOW_MS,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          updateTask.mutate({ id: task.id, patch: { title: previous } });
+        },
+      },
+    });
+  };
 }

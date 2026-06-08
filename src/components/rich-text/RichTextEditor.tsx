@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
 import { EditorContent, ReactRenderer, useEditor, type Editor } from "@tiptap/react";
 import type { Range } from "@tiptap/core";
 import { toast } from "sonner";
@@ -708,7 +708,11 @@ export function RichTextEditor({
     <div
       ref={wrapperRef}
       className={cn(
-        "relative rounded-md border bg-background transition-colors",
+        // `overflow-hidden` is what clips the sticky toolbar's flat
+        // bottom edge to the wrapper's rounded corners. Without it the
+        // toolbar's bg paints past the rounded border and the bottom
+        // corners read as square.
+        "relative overflow-hidden rounded-md border bg-background transition-colors",
         showToolbar ? "ring-1 ring-ring/40" : "",
         isDraggingOver && "ring-2 ring-primary/60",
         className
@@ -1248,21 +1252,27 @@ function Divider() {
   return <span aria-hidden className="mx-0.5 h-4 w-px bg-border" />;
 }
 
-function ToolbarButton({
-  label,
-  active,
-  onClick,
-  disabled,
-  children,
-}: {
-  label: string;
-  active?: boolean;
-  onClick: () => void;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
+// `forwardRef` is required because this component is used as a Radix
+// `<PopoverTrigger asChild>` child (link/image/embed/banner popovers), and
+// Radix's Slot needs to thread a ref through to the underlying button to
+// position the popover. Without forwardRef, the dev console fills with
+// "Function components cannot be given refs" warnings.
+const ToolbarButton = forwardRef<
+  HTMLButtonElement,
+  {
+    label: string;
+    active?: boolean;
+    onClick?: () => void;
+    disabled?: boolean;
+    children: React.ReactNode;
+  } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onClick">
+>(function ToolbarButton(
+  { label, active, onClick, disabled, children, ...rest },
+  ref
+) {
   return (
     <Button
+      ref={ref}
       type="button"
       variant="ghost"
       size="icon"
@@ -1273,11 +1283,12 @@ function ToolbarButton({
       aria-pressed={active}
       title={label}
       className={cn("h-7 w-7", active && "bg-accent text-accent-foreground")}
+      {...rest}
     >
       {children}
     </Button>
   );
-}
+});
 
 // Link form (popover content) ------------------------------------------
 

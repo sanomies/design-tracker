@@ -4,11 +4,14 @@ import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
   Check,
-  ChevronDown,
-  ChevronRight,
   GripVertical,
   Plus,
 } from "lucide-react";
+
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+
+import { IconChevronDown, IconSection } from "@/components/icons/figma";
 import {
   DndContext,
   DragOverlay,
@@ -26,6 +29,16 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -34,6 +47,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TaskContextMenu } from "@/features/tasks/TaskContextMenu";
+import { useAuth } from "@/features/auth/AuthProvider";
+import { supabase } from "@/lib/supabase";
 import {
   AddSectionDialog,
   DeleteSectionDialog,
@@ -53,8 +69,8 @@ import { buildSortComparator } from "@/features/tasks/taskSort";
 import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
 import {
   useCreateMySection,
-  useDeleteMySection,
-  useRenameMySection,
+  useUndoableDeleteMySection,
+  useUndoableRenameMySection,
   useReorderMySection,
   useMySections,
 } from "@/features/tasks/useMySections";
@@ -89,9 +105,11 @@ export default function MyTasksPage() {
   const { data: sections = [], isLoading: sectionsLoading } = useMySections();
   const updateTask = useUpdateMyTask();
   const createSection = useCreateMySection();
-  const renameSection = useRenameMySection();
+  // Section rename + delete go through the undoable helpers (6s "Undo"
+  // toast). See useMySections.ts for the rationale.
+  const undoableRenameSection = useUndoableRenameMySection();
   const reorderSection = useReorderMySection();
-  const deleteSection = useDeleteMySection();
+  const undoableDeleteSection = useUndoableDeleteMySection();
 
   const isLoading = tasksLoading || sectionsLoading;
 
@@ -274,6 +292,13 @@ export default function MyTasksPage() {
     setSearchParams(next, { replace: true });
   };
   const closePanel = () => setSelectedTaskId(null);
+
+  // Fullscreen mode for the detail panel — toggled from the panel header.
+  // Reset whenever the panel closes so reopening starts in sidebar mode.
+  const [panelFullscreen, setPanelFullscreen] = useState(false);
+  useEffect(() => {
+    if (!panelOpen) setPanelFullscreen(false);
+  }, [panelOpen]);
 
   useEffect(() => {
     if (!panelOpen) return;
@@ -482,9 +507,120 @@ export default function MyTasksPage() {
           onSelect={() =>
             setSelectedTaskId(task.id === selectedTaskId ? null : task.id)
           }
+          onContextMenu={handleRowContextMenu}
         />
       </SortableTaskRow>
     );
+  };
+
+  // ---- Right-click context menu ----
+  // MyTasks lists tasks from many projects, so duplicate/delete go
+  // straight through Supabase (project-scoped useCreateTask/useDeleteTask
+  // hooks would need to be remade per-row, which can't be done
+  // conditionally). Realtime + cache invalidation keeps the list fresh.
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [contextMenu, setContextMenu] = useState<
+    | { task: Task; x: number; y: number }
+    | null
+  >(null);
+  const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
+
+  const handleRowContextMenu = (e: React.MouseEvent, task: Task) => {
+    e.preventDefault();
+    setContextMenu({ task, x: e.clientX, y: e.clientY });
+  };
+
+  // Event-delegation listener at document level in capture phase — see
+  // the same pattern in TaskList. The capture phase ensures it fires
+  // before any descendant listener can interfere.
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const rowEl = target?.closest<HTMLElement>("[data-task-id]");
+      if (!rowEl) return;
+      const taskId = rowEl.dataset.taskId;
+      if (!taskId) return;
+      const task = allTasks.find((t) => t.id === taskId);
+      if (!task) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setContextMenu({ task, x: e.clientX, y: e.clientY });
+    };
+    document.addEventListener("contextmenu", handler, { capture: true });
+    return () =>
+      document.removeEventListener("contextmenu", handler, { capture: true });
+  }, [allTasks]);
+
+  const invalidateTaskCaches = (projectId: string | null | undefined) => {
+    void queryClient.invalidateQueries({ queryKey: ["my-tasks", user?.id] });
+    if (projectId) {
+      void queryClient.invalidateQueries({ queryKey: ["tasks", projectId] });
+    }
+  };
+
+  const duplicateTask = async (task: Task) => {
+    try {
+      const { data: created, error: createErr } = await supabase
+        .from("tasks")
+        .insert({
+          project_id: task.project_id,
+          section_id: task.section_id,
+          parent_task_id: task.parent_task_id,
+          title: task.title,
+          description: task.description,
+          assignee_id: task.assignee_id,
+          due_date: task.due_date,
+          priority: task.priority,
+          publication: task.publication,
+          position: Date.now(),
+          created_by: user?.id ?? null,
+        })
+        .select()
+        .single();
+      if (createErr) throw createErr;
+      invalidateTaskCaches(task.project_id);
+      if (created?.id) setSelectedTaskId(created.id);
+    } catch {
+      toast.error("Failed to duplicate task");
+    }
+  };
+
+  const toggleStatus = (task: Task) => {
+    const next = task.status === "done" ? "todo" : "done";
+    updateTask.mutate({ id: task.id, patch: { status: next } });
+  };
+
+  const copyTaskLink = async (task: Task) => {
+    try {
+      // Build a permalink to the task's project view with the task open,
+      // not the current /my-tasks route — shared links land on the task
+      // in its project context.
+      const url = new URL(window.location.href);
+      url.pathname = `/projects/${task.project_id}`;
+      url.search = `?task=${task.id}`;
+      await navigator.clipboard.writeText(url.toString());
+      toast.success("Link copied to clipboard");
+    } catch {
+      toast.error("Couldn't copy link");
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .delete()
+        .eq("id", target.id);
+      if (error) throw error;
+      invalidateTaskCaches(target.project_id);
+      if (selectedTaskId === target.id) setSelectedTaskId(null);
+      setPendingDelete(null);
+    } catch {
+      toast.error("Failed to delete task");
+    }
   };
 
   const activeCount = openTasks.length;
@@ -494,25 +630,35 @@ export default function MyTasksPage() {
   return (
     <div className="relative h-full flex">
       <section className="flex-1 min-w-0 flex flex-col">
-        <header className="border-b px-6 h-14 flex items-center gap-3 shrink-0">
-          <h1 className="text-base font-semibold">My tasks</h1>
-          {activeCount > 0 && (
-            <span className="text-sm text-muted-foreground">{activeCount}</span>
-          )}
-          <div className="ml-auto flex items-center gap-2">
+        {/* Header + action row form one logical block in the Figma —
+            16px outer padding with an 8px gap between rows (pb-0 + pt-2). */}
+        <header className="px-4 pt-4 pb-0 flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 py-2">
+            <h1 className="text-lg font-semibold leading-tight">My tasks</h1>
+            {activeCount > 0 && (
+              <span className="text-sm text-[#708597]">{activeCount}</span>
+            )}
+          </div>
+          {/* flex-1 + justify-end lets the search grow into all
+              remaining header width; the combobox itself caps at
+              400px and stays right-aligned within. */}
+          <div className="ml-auto flex-1 flex justify-end">
             <TaskSearchCombobox workspaceId={undefined} />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 gap-1.5"
-              onClick={() => setAddSectionOpen(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add section
-            </Button>
           </div>
         </header>
+
+        {/* Action row — only Add Section here (My Tasks doesn't create
+            tasks itself; tasks land via assignment from project views). */}
+        <div className="shrink-0 bg-background px-4 pb-4 pt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setAddSectionOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-[#DEDFE0] bg-white pl-2 pr-3 py-2 text-sm font-medium text-foreground hover:bg-[#EDF2F4] transition-colors shrink-0"
+          >
+            <IconSection className="h-6 w-6" />
+            Add Section
+          </button>
+        </div>
 
         {isLoading ? (
           <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2">
@@ -524,13 +670,6 @@ export default function MyTasksPage() {
           <EmptyState onAddSection={() => setAddSectionOpen(true)} />
         ) : (
           <>
-            <TaskListHeader
-              workspaceId={undefined}
-              filters={filters}
-              onChange={setFilters}
-              sort={sort}
-              onSortChange={setSort}
-            />
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -539,6 +678,19 @@ export default function MyTasksPage() {
               onDragCancel={finishDrag}
             >
               <div className="flex-1 min-h-0 overflow-y-auto">
+                {/* Header lives INSIDE the scroll container so header and
+                    rows share the same width — when the scrollbar takes
+                    width, both shrink together and column dividers stay
+                    pixel-aligned. `sticky top-0` keeps it pinned. */}
+                <div className="sticky top-0 z-20">
+                  <TaskListHeader
+                    workspaceId={undefined}
+                    filters={filters}
+                    onChange={setFilters}
+                    sort={sort}
+                    onSortChange={setSort}
+                  />
+                </div>
                 {/* "Unassigned" — pinned at the top, always rendered. New
                     assignments land here; the user can drag them into
                     personal sections below. Can't be renamed or deleted. */}
@@ -607,10 +759,11 @@ export default function MyTasksPage() {
 
             {doneTasks.length > 0 && (
               <div
-                className={cn(
-                  "shrink-0 flex flex-col bg-background",
-                  doneCollapsed && "border-t"
-                )}
+                // Redesigned Done section per Figma: flat gray block
+                // (`#F6F9F9`) + single top border, full width. Chevron
+                // bumps to 24×24 (larger than the 18×18 used on the inline
+                // section headers above).
+                className="shrink-0 flex flex-col bg-[#F6F9F9] border-t border-[#DEDFE0]"
                 style={doneCollapsed ? undefined : { height: doneHeight }}
               >
                 {!doneCollapsed && (
@@ -618,38 +771,34 @@ export default function MyTasksPage() {
                     type="button"
                     aria-label="Resize Done section"
                     onPointerDown={onDoneResize}
-                    className="group h-2 w-full cursor-row-resize shrink-0 focus:outline-none bg-[#F5F7FA]"
+                    className="group h-1.5 w-full cursor-row-resize shrink-0 focus:outline-none bg-transparent"
                   >
                     <span
                       className={cn(
-                        "block w-full h-0.5 -mt-px transition-colors",
+                        "block w-full h-0.5 transition-colors",
                         doneResizing
                           ? "bg-primary/60"
-                          : "bg-border group-hover:bg-primary/40"
+                          : "bg-transparent group-hover:bg-primary/40"
                       )}
                     />
                   </button>
                 )}
-                <div
-                  className={cn(
-                    "shrink-0 flex items-center gap-1 px-3 bg-[#F5F7FA] border-b",
-                    doneCollapsed ? "h-[68px]" : "py-1.5"
-                  )}
-                >
+                <div className="group shrink-0 flex items-center gap-2 mx-2 px-2 py-2 hover:bg-[#EDF2F4]/60 rounded-lg transition-colors">
                   <button
                     type="button"
                     onClick={() => setDoneCollapsed((c) => !c)}
-                    className="h-5 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground rounded"
+                    className="h-6 w-6 flex items-center justify-center text-foreground/80 hover:text-foreground rounded"
                     aria-label={doneCollapsed ? "Expand Done section" : "Collapse Done section"}
                   >
-                    {doneCollapsed ? (
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    )}
+                    <IconChevronDown
+                      className={cn(
+                        "h-6 w-6 transition-transform",
+                        doneCollapsed && "-rotate-90"
+                      )}
+                    />
                   </button>
                   <h2 className="text-lg font-semibold">Done</h2>
-                  <span className="text-xs text-muted-foreground ml-1">
+                  <span className="text-sm text-[#708597] ml-1">
                     {doneTasks.length}
                   </span>
                   {!doneCollapsed && (
@@ -725,41 +874,45 @@ export default function MyTasksPage() {
           section={renamingSection ? toSectionShim(renamingSection) : null}
           open={!!renamingSection}
           onOpenChange={(open) => !open && setRenamingSection(null)}
-          onSubmit={(id, name) => renameSection.mutate({ id, name })}
+          onSubmit={(_id, name) => {
+            if (renamingSection) undoableRenameSection(renamingSection, name);
+          }}
         />
         <DeleteSectionDialog
           section={deletingSection ? toSectionShim(deletingSection) : null}
           open={!!deletingSection}
           onOpenChange={(open) => !open && setDeletingSection(null)}
-          onConfirm={(id) => {
-            deleteSection.mutate(id);
+          onConfirm={() => {
+            if (deletingSection) undoableDeleteSection(deletingSection);
             setDeletingSection(null);
           }}
         />
       </section>
 
       <aside
-        aria-hidden={!panelOpen}
-        style={{ width: panelOpen ? panelWidth : 0 }}
+        aria-hidden={!panelOpen || panelFullscreen}
+        style={{ width: panelOpen && !panelFullscreen ? panelWidth : 0 }}
         className={cn(
           "relative shrink-0 overflow-hidden border-l bg-background",
           !isResizing && "transition-[width] duration-200 ease-out",
-          panelOpen && "shadow-[-12px_0_28px_-16px_rgba(0,0,0,0.18)]"
+          panelOpen && !panelFullscreen && "shadow-[-12px_0_28px_-16px_rgba(0,0,0,0.18)]"
         )}
       >
         <div style={{ width: panelWidth }} className="h-full">
-          {selectedTask && (
+          {selectedTask && !panelFullscreen && (
             <TaskDetailPanel
               key={selectedTask.id}
               task={selectedTask}
               workspaceId={selectedTask.project?.workspace_id}
               onClose={closePanel}
+              isFullscreen={false}
+              onToggleFullscreen={() => setPanelFullscreen(true)}
             />
           )}
         </div>
       </aside>
 
-      {panelOpen && (
+      {panelOpen && !panelFullscreen && (
         <button
           type="button"
           aria-label="Resize panel"
@@ -778,6 +931,58 @@ export default function MyTasksPage() {
           />
         </button>
       )}
+
+      {/* Fullscreen overlay — sits above everything (incl. the z-10
+          sidebar) so the task panel takes the whole viewport. */}
+      {selectedTask && panelFullscreen && (
+        <div className="fixed inset-0 z-50 bg-background">
+          <TaskDetailPanel
+            key={`${selectedTask.id}-fs`}
+            task={selectedTask}
+            workspaceId={selectedTask.project?.workspace_id}
+            onClose={closePanel}
+            isFullscreen
+            onToggleFullscreen={() => setPanelFullscreen(false)}
+          />
+        </div>
+      )}
+
+      {contextMenu && (
+        <TaskContextMenu
+          task={contextMenu.task}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={() => setContextMenu(null)}
+          onDuplicate={() => void duplicateTask(contextMenu.task)}
+          onToggleStatus={() => toggleStatus(contextMenu.task)}
+          onOpen={() => setSelectedTaskId(contextMenu.task.id)}
+          onCopyLink={() => void copyTaskLink(contextMenu.task)}
+          onDelete={() => setPendingDelete(contextMenu.task)}
+        />
+      )}
+
+      <AlertDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              “{pendingDelete?.title || "Untitled task"}” will be removed
+              permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
