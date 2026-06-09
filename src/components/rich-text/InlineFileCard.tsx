@@ -39,7 +39,12 @@ export function InlineFileCard({ src, name, className }: Props) {
       href={src}
       target="_blank"
       rel="noopener noreferrer"
+      // The `inline-file-card` class is the hook that scopes off the
+      // .tiptap-content `a { underline + text-primary }` rule for this
+      // element specifically — otherwise the chip's children inherit the
+      // editor's link styling and read as a stack of blue-underlined text.
       className={cn(
+        "inline-file-card",
         "not-prose inline-flex items-center gap-2 max-w-full",
         "rounded-2xl border border-[#DEDFE0] bg-white hover:bg-[#F6F9F9] transition-colors",
         "pl-2 pr-4 py-2 no-underline align-middle",
@@ -72,7 +77,7 @@ export function InlineFileCard({ src, name, className }: Props) {
               e.stopPropagation();
               void downloadFileFromUrl(src, name);
             }}
-            className="font-semibold text-foreground hover:underline"
+            className="font-semibold text-[#708597] hover:text-foreground"
           >
             Download
           </button>
@@ -127,7 +132,7 @@ function fileKind(ext: string): Kind {
 }
 
 function FileGlyph({ kind }: { kind: Kind }) {
-  const cls = "h-[18px] w-[18px] text-foreground";
+  const cls = "h-[18px] w-[18px] text-[#708597]";
   switch (kind) {
     case "image":      return <ImageIcon className={cls} />;
     case "video":      return <FileVideo className={cls} />;

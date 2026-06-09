@@ -66,6 +66,7 @@ import { SlashCommand, type SlashCommandPayload } from "./SlashCommandExtension"
 import { SlashMenu, type SlashItem, type SlashMenuHandle } from "./SlashMenu";
 import { BannerNode } from "./BannerNode";
 import { BannerPicker, type AnchorTarget as BannerAnchor } from "./BannerPicker";
+import { InlineFileNode } from "./InlineFileNode";
 import { CopyDimensionsOverlay } from "./CopyDimensionsOverlay";
 import type { Banner } from "./bannerCatalog";
 
@@ -531,8 +532,9 @@ export function RichTextEditor({
       if (!editor) return;
 
       // Build one mixed content array: image nodes (inline) followed by
-      // paragraph-wrapped links (block). insertContent handles the mix —
-      // images stay in the current paragraph, links each start a new line.
+      // paragraph-wrapped inline-file nodes (each chip on its own line).
+      // insertContent handles the mix in one transaction so successive
+      // drops don't race the editor schema.
       const content: Record<string, unknown>[] = [
         ...imageUrls.map((url) => ({
           type: "image",
@@ -542,18 +544,8 @@ export function RichTextEditor({
           type: "paragraph",
           content: [
             {
-              type: "text",
-              text: name,
-              marks: [
-                {
-                  type: "link",
-                  attrs: {
-                    href: url,
-                    target: "_blank",
-                    rel: "noopener noreferrer",
-                  },
-                },
-              ],
+              type: "inlineFile",
+              attrs: { href: url, name },
             },
           ],
         })),
@@ -605,6 +597,7 @@ export function RichTextEditor({
         }),
       }),
       BannerNode,
+      InlineFileNode,
     ],
     content: value || "",
     autofocus: autoFocus ?? false,

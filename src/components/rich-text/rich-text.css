@@ -76,6 +76,18 @@
   @apply text-primary underline underline-offset-2;
 }
 
+/* Inline file cards opt out of the link styling above — their visual is
+   handled by the InlineFileCard component itself (rounded pill, plain
+   text). Without this override the filename + meta row read as a stack
+   of blue-underlined links inside the editor + comment views. */
+.tiptap-content a.inline-file-card,
+.tiptap-content a.inline-file-card * {
+  text-decoration: none;
+}
+.tiptap-content a.inline-file-card {
+  color: inherit;
+}
+
 .tiptap-content img,
 .tiptap-content .tiptap-image {
   @apply rounded max-w-full h-auto my-2;
