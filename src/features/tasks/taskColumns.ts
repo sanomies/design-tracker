@@ -22,7 +22,11 @@ export const DEFAULT_COLUMN_ORDER: ColumnId[] = [
 ];
 
 export const COLUMN_LABELS: Record<ColumnId, string> = {
-  publication: "Publication",
+  // The internal column id stays "publication" so the DB column and any
+  // stored column-order localStorage entries keep working untouched —
+  // the user-facing label just renames to "Brand" to match the latest
+  // Figma + detail-panel field name.
+  publication: "Brand",
   assignee: "Assignee",
   due: "Due date",
   createdBy: "Created by",

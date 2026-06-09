@@ -630,12 +630,12 @@ function PublicationFilter({
         )}
       >
         <span className="w-3.5" />
-        Any publication
+        Any brand
       </button>
       <div className="h-px bg-border my-1" />
       <div className="max-h-64 overflow-y-auto">
         <FilterRow
-          label="No publication"
+          label="No brand"
           checked={selected?.has(null) ?? false}
           onToggle={() => toggle(null)}
           leading={

@@ -243,7 +243,7 @@ export function MobileTaskList({
               <HeaderCell sticky width={NAME_MIN}>
                 Name
               </HeaderCell>
-              <HeaderCell width={COL_PUBLICATION}>Publication</HeaderCell>
+              <HeaderCell width={COL_PUBLICATION}>Brand</HeaderCell>
               <HeaderCell width={COL_ASSIGNEE}>Assignee</HeaderCell>
               <HeaderCell width={COL_TYPE}>Type</HeaderCell>
               <HeaderCell width={COL_DUE}>Due Date</HeaderCell>

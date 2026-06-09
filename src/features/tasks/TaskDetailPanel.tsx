@@ -423,7 +423,13 @@ function PropertyRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[80px_1fr] items-center gap-4 py-2 min-h-[40px]">
+    // Fixed 44px row height so every row in both columns lines up across
+    // the grid, regardless of whether the value cell holds a 24px chip
+    // (publication / assignee) or plain text (type / priority / section).
+    // Previously `py-2` + `min-h-40` produced 42px rows for chip-bearing
+    // values and 40px rows for text values, which drifted across the
+    // column.
+    <div className="grid grid-cols-[80px_1fr] items-center gap-4 h-[44px]">
       <span className="inline-flex items-center gap-2 text-xs font-medium text-[#708597]">
         {icon}
         {label}
