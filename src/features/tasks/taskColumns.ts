@@ -9,7 +9,8 @@ export type ColumnId =
   | "assignee"
   | "due"
   | "createdBy"
-  | "priority";
+  | "priority"
+  | "type";
 
 export const DEFAULT_COLUMN_ORDER: ColumnId[] = [
   "publication",
@@ -17,6 +18,7 @@ export const DEFAULT_COLUMN_ORDER: ColumnId[] = [
   "due",
   "createdBy",
   "priority",
+  "type",
 ];
 
 export const COLUMN_LABELS: Record<ColumnId, string> = {
@@ -25,6 +27,7 @@ export const COLUMN_LABELS: Record<ColumnId, string> = {
   due: "Due date",
   createdBy: "Created by",
   priority: "Priority",
+  type: "Type",
 };
 
 export type SortDirection = "asc" | "desc";
@@ -47,6 +50,7 @@ export const COLUMN_MIN_WIDTHS: Record<ColumnId, number> = {
   due: 95,
   createdBy: 120,
   priority: 95,
+  type: 105,
 };
 
 // --- Persisted column order ------------------------------------------

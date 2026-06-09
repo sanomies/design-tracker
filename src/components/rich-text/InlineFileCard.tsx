@@ -1,10 +1,12 @@
 import {
-  Download,
   File as FileIconLucide,
+  FileArchive,
   FileAudio,
+  FileSpreadsheet,
   FileText,
   FileVideo,
   Image as ImageIcon,
+  Presentation,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -18,17 +20,19 @@ type Props = {
 };
 
 /**
- * Renders a non-image inline file (PDF, doc, etc.) embedded in a comment or
- * description as a clickable tile — file-type icon on the left, filename +
- * extension on the right — matching the look of attachment tiles.
+ * Renders a non-image inline file (PDF, doc, zip, video, audio…) embedded
+ * in a comment or description as a pill — file-type tile on the left,
+ * filename + "TYPE File | Download" on the right. The card itself opens
+ * the file in a new tab; the "Download" affordance is a separate click
+ * target that bypasses the open-in-tab behaviour.
  *
- * The parser swaps `<a href="...task-images/...">name</a>` for this when
- * rendering comment HTML, so files inserted via drop/paste look like first-
- * class objects rather than plain hyperlinks.
+ * Visual spec lifted from Figma node 417:10336 et al. — 16px radius pill,
+ * 36×36 light-gray icon tile inside, 14px filename, 12px meta row.
  */
 export function InlineFileCard({ src, name, className }: Props) {
-  const mime = inferMimeFromName(name);
-  const ext = extLabel(name, mime);
+  const ext = extension(name);
+  const kind = fileKind(ext);
+  const kindLabel = friendlyKindLabel(ext, kind);
 
   return (
     <a
@@ -36,89 +40,128 @@ export function InlineFileCard({ src, name, className }: Props) {
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        "not-prose inline-flex items-center gap-2 max-w-full w-[280px] rounded-md border bg-muted/40 px-3 py-2 hover:bg-muted/60 transition-colors no-underline align-middle",
+        "not-prose inline-flex items-center gap-2 max-w-full",
+        "rounded-2xl border border-[#DEDFE0] bg-white hover:bg-[#F6F9F9] transition-colors",
+        "pl-2 pr-4 py-2 no-underline align-middle",
         className
       )}
     >
-      <FileGlyph mime={mime} />
-      <div className="flex-1 min-w-0 leading-tight">
-        <p className="text-sm font-medium truncate text-foreground" title={name}>
-          {name}
-        </p>
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-          {ext}
-        </p>
-      </div>
-      <button
-        type="button"
-        // Stop the outer `<a>`'s open-in-new-tab so this acts as a download
-        // button instead of a second click target for the same navigation.
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          void downloadFileFromUrl(src, name);
-        }}
-        className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
-        aria-label={`Download ${name}`}
-        title={`Download ${name}`}
+      <span
+        className="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-lg border border-[#DEDFE0] bg-[#F6F9F9]"
+        aria-hidden
       >
-        <Download className="h-3.5 w-3.5" />
-      </button>
+        <FileGlyph kind={kind} />
+      </span>
+      <span className="flex flex-col items-start gap-1 leading-tight min-w-0">
+        <span
+          className="text-sm font-medium text-foreground truncate max-w-[220px]"
+          title={name}
+        >
+          {name}
+        </span>
+        <span className="flex items-center gap-1 text-xs text-[#708597]">
+          <span>{kindLabel}</span>
+          <span aria-hidden>|</span>
+          <button
+            type="button"
+            // Stop the outer `<a>`'s open-in-new-tab so this acts as a
+            // download button instead of a second click target for the
+            // same navigation.
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void downloadFileFromUrl(src, name);
+            }}
+            className="font-semibold text-foreground hover:underline"
+          >
+            Download
+          </button>
+        </span>
+      </span>
     </a>
   );
 }
 
-function FileGlyph({ mime }: { mime: string | null }) {
-  const cls = "h-7 w-7 shrink-0 text-muted-foreground";
-  if (!mime) return <FileIconLucide className={cls} />;
-  if (mime.startsWith("image/")) return <ImageIcon className={cls} />;
-  if (mime.startsWith("video/")) return <FileVideo className={cls} />;
-  if (mime.startsWith("audio/")) return <FileAudio className={cls} />;
-  if (mime === "application/pdf" || mime.startsWith("text/")) {
-    return <FileText className={cls} />;
+// File-kind taxonomy ----------------------------------------------------
+//
+// Splitting into kinds (rather than mime-strings) lets one icon paint
+// for the whole "office docs" family while keeping zip/audio/video
+// distinct. New extensions can be added below without touching the
+// renderer.
+
+type Kind =
+  | "image"
+  | "video"
+  | "audio"
+  | "pdf"
+  | "word"
+  | "excel"
+  | "powerpoint"
+  | "archive"
+  | "text"
+  | "other";
+
+function fileKind(ext: string): Kind {
+  switch (ext) {
+    case "png": case "jpg": case "jpeg": case "gif": case "webp": case "svg":
+      return "image";
+    case "mp4": case "mov": case "avi": case "mkv": case "webm":
+      return "video";
+    case "mp3": case "wav": case "ogg": case "flac": case "m4a":
+      return "audio";
+    case "pdf":
+      return "pdf";
+    case "doc": case "docx":
+      return "word";
+    case "xls": case "xlsx": case "csv":
+      return "excel";
+    case "ppt": case "pptx":
+      return "powerpoint";
+    case "zip": case "rar": case "7z": case "tar": case "gz":
+      return "archive";
+    case "txt": case "md": case "json":
+      return "text";
+    default:
+      return "other";
   }
-  return <FileIconLucide className={cls} />;
 }
 
-const EXT_TO_MIME: Record<string, string> = {
-  pdf: "application/pdf",
-  doc: "application/msword",
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  xls: "application/vnd.ms-excel",
-  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ppt: "application/vnd.ms-powerpoint",
-  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  txt: "text/plain",
-  csv: "text/csv",
-  md: "text/markdown",
-  json: "application/json",
-  zip: "application/zip",
-  mp3: "audio/mpeg",
-  mp4: "video/mp4",
-  mov: "video/quicktime",
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  svg: "image/svg+xml",
-};
+function FileGlyph({ kind }: { kind: Kind }) {
+  const cls = "h-[18px] w-[18px] text-foreground";
+  switch (kind) {
+    case "image":      return <ImageIcon className={cls} />;
+    case "video":      return <FileVideo className={cls} />;
+    case "audio":      return <FileAudio className={cls} />;
+    case "pdf":        return <FileText className={cls} />;
+    case "word":       return <FileText className={cls} />;
+    case "excel":      return <FileSpreadsheet className={cls} />;
+    case "powerpoint": return <Presentation className={cls} />;
+    case "archive":    return <FileArchive className={cls} />;
+    case "text":       return <FileText className={cls} />;
+    case "other":      return <FileIconLucide className={cls} />;
+  }
+}
 
-function inferMimeFromName(name: string): string | null {
+// Human-readable label shown next to the filename ("ZIP File", "Word
+// File", "MP4 File", etc.). Falls back to the uppercase extension for
+// anything outside the curated table.
+function friendlyKindLabel(ext: string, kind: Kind): string {
+  if (kind === "word")       return "Word File";
+  if (kind === "excel")      return ext === "csv" ? "CSV File" : "Excel File";
+  if (kind === "powerpoint") return "Powerpoint File";
+  if (kind === "pdf")        return "PDF File";
+  if (kind === "archive")    return `${ext.toUpperCase()} File`;
+  if (kind === "video")      return `${ext.toUpperCase()} File`;
+  if (kind === "audio")      return `${ext.toUpperCase()} File`;
+  if (kind === "image")      return `${ext.toUpperCase()} File`;
+  if (kind === "text")       return `${ext.toUpperCase()} File`;
+  // Unknown extension — uppercase the suffix or fall back to a generic
+  // "File" label so the meta row never reads "undefined File".
+  return ext ? `${ext.toUpperCase()} File` : "File";
+}
+
+function extension(name: string): string {
   const dot = name.lastIndexOf(".");
-  if (dot < 0) return null;
-  const ext = name.slice(dot + 1).toLowerCase();
-  return EXT_TO_MIME[ext] ?? null;
-}
-
-function extLabel(name: string, mime: string | null): string {
-  const fromName = name.split(".").pop()?.toUpperCase();
-  if (fromName && fromName.length <= 5 && fromName !== name.toUpperCase()) {
-    return fromName;
-  }
-  if (mime) {
-    const sub = mime.split("/")[1];
-    if (sub) return sub.toUpperCase();
-  }
-  return "FILE";
+  if (dot < 0) return "";
+  return name.slice(dot + 1).toLowerCase();
 }

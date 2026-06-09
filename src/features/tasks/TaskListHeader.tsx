@@ -28,6 +28,7 @@ import type { Profile, TaskPriority } from "@/types/database";
 
 import { PRIORITIES } from "./priority";
 import { PUBLICATIONS, PUBLICATION_CATEGORIES } from "./publications";
+import { TASK_TYPES } from "./taskTypes";
 import {
   COLUMN_LABELS,
   COLUMN_MIN_WIDTHS,
@@ -226,7 +227,68 @@ function renderHeaderCell(
           />
         </ColumnHeader>
       );
+    case "type":
+      return (
+        <ColumnHeader
+          label={COLUMN_LABELS.type}
+          active={filters.type !== null}
+          sortDirection={sortDirection}
+          onSortClick={handleSort}
+        >
+          <TypeFilter
+            selected={filters.type}
+            onChange={(next) => onChange({ ...filters, type: next })}
+          />
+        </ColumnHeader>
+      );
   }
+}
+
+// --- Task-type multi-select filter -----------------------------------
+
+function TypeFilter({
+  selected,
+  onChange,
+}: {
+  selected: Set<string | null> | null;
+  onChange: (next: Set<string | null> | null) => void;
+}) {
+  const toggle = (slug: string | null) => {
+    const next = new Set(selected ?? []);
+    if (next.has(slug)) next.delete(slug);
+    else next.add(slug);
+    onChange(next.size > 0 ? next : null);
+  };
+
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        className={cn(
+          "flex items-center gap-2 rounded px-2 py-1.5 text-sm normal-case font-normal hover:bg-accent",
+          selected === null && "text-foreground"
+        )}
+      >
+        <span className="w-3.5" />
+        Any type
+      </button>
+      <div className="h-px bg-border my-1" />
+      <FilterRow
+        label="No type"
+        checked={selected?.has(null) ?? false}
+        onToggle={() => toggle(null)}
+      />
+      {TASK_TYPES.map((t) => (
+        <FilterRow
+          key={t.slug}
+          label={t.name}
+          checked={selected?.has(t.slug) ?? false}
+          onToggle={() => toggle(t.slug)}
+        />
+      ))}
+    </div>
+  );
 }
 
 // --- Sortable wrapper ------------------------------------------------

@@ -20,6 +20,8 @@ export type Filters = {
   priority: Set<TaskPriority | "none"> | null;
   /** null = no filter. Strings are publication slugs; null in the set = no publication. */
   publication: Set<string | null> | null;
+  /** null = no filter. Strings are task-type slugs; null in the set = no type. */
+  type: Set<string | null> | null;
   /** "all" = no filter. */
   dueDate: DueDatePreset;
 };
@@ -29,6 +31,7 @@ export const defaultFilters: Filters = {
   createdBy: null,
   priority: null,
   publication: null,
+  type: null,
   dueDate: "all",
 };
 
@@ -38,6 +41,7 @@ export function hasActiveFilter(f: Filters): boolean {
     f.createdBy !== null ||
     f.priority !== null ||
     f.publication !== null ||
+    f.type !== null ||
     f.dueDate !== "all"
   );
 }
@@ -52,6 +56,7 @@ export function matchesFilters(t: Task, f: Filters): boolean {
     if (!f.priority.has(key)) return false;
   }
   if (f.publication && !f.publication.has(t.publication ?? null)) return false;
+  if (f.type && !f.type.has(t.type ?? null)) return false;
   if (f.dueDate !== "all") {
     const due = t.due_date ? parseISO(t.due_date) : null;
     if (f.dueDate === "none") {

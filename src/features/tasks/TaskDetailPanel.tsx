@@ -3,14 +3,17 @@ import { useSearchParams } from "react-router-dom";
 import { format, isBefore, isToday, isTomorrow, parseISO, startOfDay } from "date-fns";
 import {
   ArrowUpLeft,
+  Check,
   Newspaper,
   Plus,
+  Tag,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   IconCalendar,
+  IconCircle,
   IconFlag,
   IconLink,
   IconMaximize,
@@ -61,6 +64,8 @@ import type { Profile, Task, TaskPriority } from "@/types/database";
 import { PRIORITIES, priorityMeta } from "./priority";
 import { PublicationPickerContent } from "./PublicationPicker";
 import { getPublication } from "./publications";
+import { TypePickerContent } from "./TypePicker";
+import { getTaskType } from "./taskTypes";
 import {
   useTasks,
   useUndoableDeleteTask,
@@ -193,9 +198,11 @@ function PanelBody({
   return (
     <div className="h-full flex flex-col">
       <header className="bg-white border-b border-[#DEDFE0] p-4 flex items-center justify-between gap-4 shrink-0">
-        <PublicationPill
-          value={task.publication}
-          onChange={(publication) => update({ publication })}
+        <MarkCompleteButton
+          done={task.status === "done"}
+          onToggle={() =>
+            update({ status: task.status === "done" ? "todo" : "done" })
+          }
         />
         {/* All header icons are 18×18 per the latest Figma. Spacing of
             16px between them mirrors the design's `gap-[16px]`. */}
@@ -280,35 +287,57 @@ function PanelBody({
               onSave={(title) => undoableRenameTask(task, title)}
             />
 
-            <div className="divide-y divide-[#DEDFE0]">
-              <PropertyRow label="Assignee" icon={<IconUser className="h-[18px] w-[18px] text-foreground" />}>
-                <AssigneeInline
-                  members={members ?? []}
-                  value={task.assignee_id}
-                  onChange={(assignee_id) => update({ assignee_id })}
-                />
-              </PropertyRow>
-              <PropertyRow label="Due Date" icon={<IconCalendar className="h-[18px] w-[18px] text-foreground" />}>
-                <DueInline
-                  value={task.due_date}
-                  onChange={(due_date) => update({ due_date })}
-                />
-              </PropertyRow>
-              <PropertyRow label="Priority" icon={<IconFlag className="h-[18px] w-[18px] text-foreground" />}>
-                <PriorityInline
-                  value={task.priority}
-                  onChange={(priority) => update({ priority })}
-                />
-              </PropertyRow>
-              {(sections.length > 0 || task.section_id) && (
-                <PropertyRow label="Section" icon={<IconSection className="h-[18px] w-[18px] text-foreground" />}>
-                  <SectionInline
-                    sections={sections}
-                    value={task.section_id}
-                    onChange={(section_id) => update({ section_id })}
+            {/* Property grid — two columns of stacked rows. Each column
+                gets its own internal `divide-y` so the hairline between
+                rows lines up per-column even when one column has fewer
+                rows than the other. Field order from the Figma:
+                  Left  → Brand · Assignee · Due Date
+                  Right → Type  · Priority · Section */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0">
+              <div className="divide-y divide-[#DEDFE0]">
+                <PropertyRow label="Brand" icon={<Newspaper className="h-[18px] w-[18px] text-foreground" />}>
+                  <PublicationInline
+                    value={task.publication}
+                    onChange={(publication) => update({ publication })}
                   />
                 </PropertyRow>
-              )}
+                <PropertyRow label="Assignee" icon={<IconUser className="h-[18px] w-[18px] text-foreground" />}>
+                  <AssigneeInline
+                    members={members ?? []}
+                    value={task.assignee_id}
+                    onChange={(assignee_id) => update({ assignee_id })}
+                  />
+                </PropertyRow>
+                <PropertyRow label="Due Date" icon={<IconCalendar className="h-[18px] w-[18px] text-foreground" />}>
+                  <DueInline
+                    value={task.due_date}
+                    onChange={(due_date) => update({ due_date })}
+                  />
+                </PropertyRow>
+              </div>
+              <div className="divide-y divide-[#DEDFE0]">
+                <PropertyRow label="Type" icon={<Tag className="h-[18px] w-[18px] text-foreground" />}>
+                  <TypeInline
+                    value={task.type}
+                    onChange={(type) => update({ type })}
+                  />
+                </PropertyRow>
+                <PropertyRow label="Priority" icon={<IconFlag className="h-[18px] w-[18px] text-foreground" />}>
+                  <PriorityInline
+                    value={task.priority}
+                    onChange={(priority) => update({ priority })}
+                  />
+                </PropertyRow>
+                {(sections.length > 0 || task.section_id) && (
+                  <PropertyRow label="Section" icon={<IconSection className="h-[18px] w-[18px] text-foreground" />}>
+                    <SectionInline
+                      sections={sections}
+                      value={task.section_id}
+                      onChange={(section_id) => update({ section_id })}
+                    />
+                  </PropertyRow>
+                )}
+              </div>
             </div>
 
             <DescriptionField
@@ -394,7 +423,7 @@ function PropertyRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[100px_1fr] items-center gap-4 py-2">
+    <div className="grid grid-cols-[80px_1fr] items-center gap-4 py-2 min-h-[40px]">
       <span className="inline-flex items-center gap-2 text-xs font-medium text-[#708597]">
         {icon}
         {label}
@@ -530,9 +559,40 @@ function DescriptionField({
   );
 }
 
-// Publication pill (top-left of the panel) ----------------------------
+// Mark complete pill (top-left of the panel) -------------------------
 
-function PublicationPill({
+function MarkCompleteButton({
+  done,
+  onToggle,
+}: {
+  done: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={done}
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full border pl-2 pr-3 py-2 text-xs font-medium transition-colors",
+        done
+          ? "bg-[#00BC7C] border-[#00BC7C] text-white hover:bg-[#00BC7C]/90"
+          : "bg-[#F6F9F9] border-[#DEDFE0] text-foreground hover:bg-[#EDF2F4]"
+      )}
+    >
+      {done ? (
+        <Check className="h-[15px] w-[15px]" strokeWidth={2} aria-hidden />
+      ) : (
+        <IconCircle className="h-[15px] w-[15px]" aria-hidden />
+      )}
+      <span>{done ? "Completed" : "Mark complete"}</span>
+    </button>
+  );
+}
+
+// Publication inline (in the property grid) --------------------------
+
+function PublicationInline({
   value,
   onChange,
 }: {
@@ -545,26 +605,57 @@ function PublicationPill({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-full border border-[#DEDFE0] bg-[#F6F9F9] hover:bg-[#EDF2F4] pl-2 pr-3 py-2 text-xs font-medium transition-colors max-w-full"
-        >
+        <button type="button" className={PROPERTY_TRIGGER_CLASS}>
           {current ? (
-            <img
-              src={current.thumbnail}
-              alt=""
-              className="h-6 w-6 rounded-full object-cover shrink-0"
-            />
+            <>
+              <img
+                src={current.thumbnail}
+                alt=""
+                className="h-6 w-6 rounded object-cover shrink-0"
+              />
+              <span className="truncate">{current.name}</span>
+            </>
           ) : (
-            <span className="h-6 w-6 inline-flex items-center justify-center shrink-0">
-              <Newspaper className="h-4 w-4 text-[#708597]" aria-hidden />
-            </span>
+            <EmptyValue />
           )}
-          <span className="truncate">{current ? current.name : "No publication"}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="p-1 w-64 max-h-80 overflow-y-auto">
         <PublicationPickerContent
+          value={value}
+          onChange={onChange}
+          onClose={() => setOpen(false)}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Type inline (in the property grid) ---------------------------------
+
+function TypeInline({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (slug: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = getTaskType(value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className={PROPERTY_TRIGGER_CLASS}>
+          {current ? (
+            <span className="truncate">{current.name}</span>
+          ) : (
+            <EmptyValue />
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="p-1 w-44">
+        <TypePickerContent
           value={value}
           onChange={onChange}
           onClose={() => setOpen(false)}

@@ -2,6 +2,7 @@ import type { Profile, Task } from "@/types/database";
 
 import { PUBLICATIONS } from "./publications";
 import type { SortState } from "./taskColumns";
+import { TASK_TYPES } from "./taskTypes";
 
 // Build a comparator from the active sort state. Returns null when no
 // sort is set — caller falls back to position-based ordering. Nulls /
@@ -21,6 +22,8 @@ export function buildSortComparator(
   }
   const pubIndex = new Map<string, number>();
   PUBLICATIONS.forEach((p, i) => pubIndex.set(p.slug, i));
+  const typeIndex = new Map<string, number>();
+  TASK_TYPES.forEach((t, i) => typeIndex.set(t.slug, i));
 
   switch (column) {
     case "assignee":
@@ -61,6 +64,16 @@ export function buildSortComparator(
         compareNullable(
           a.publication ? pubIndex.get(a.publication) ?? 0 : null,
           b.publication ? pubIndex.get(b.publication) ?? 0 : null,
+          (x, y) => x - y,
+          dir
+        );
+    case "type":
+      // Unknown slugs sort after known ones (defensive against legacy
+      // values); within known/unknown the slug catalog order wins.
+      return (a, b) =>
+        compareNullable(
+          a.type ? typeIndex.get(a.type) ?? TASK_TYPES.length : null,
+          b.type ? typeIndex.get(b.type) ?? TASK_TYPES.length : null,
           (x, y) => x - y,
           dir
         );

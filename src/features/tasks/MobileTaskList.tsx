@@ -27,6 +27,7 @@ import type { Section, Task } from "@/types/database";
 
 import { TaskCheckbox } from "./TaskCheckbox";
 import { getPublication } from "./publications";
+import { getTaskType } from "./taskTypes";
 import {
   useCreateTask,
   useTasks,
@@ -34,12 +35,13 @@ import {
   useUndoableRenameTask,
 } from "./useTasks";
 
-// Mobile column widths — chosen so the metadata strip totals ~370px,
+// Mobile column widths — chosen so the metadata strip totals ~480px,
 // scrollable to the right of the pinned 200px Name column. Tweaking
 // these is the cheapest way to tune the layout's density.
 const COL_PUBLICATION = 130;
 const COL_ASSIGNEE = 140;
 const COL_DUE = 100;
+const COL_TYPE = 110;
 const NAME_MIN = 200;
 
 const COLLAPSED_STORAGE_PREFIX = "design-tracker:collapsed-sections:";
@@ -193,7 +195,7 @@ export function MobileTaskList({
   // Scroll width covers the sticky Name column + all metadata cells. We
   // set this as the inner content width so the horizontal scroll has a
   // single, stable extent regardless of how many sections are rendered.
-  const innerWidth = `calc(${NAME_MIN}px + ${COL_PUBLICATION + COL_ASSIGNEE + COL_DUE}px)`;
+  const innerWidth = `calc(${NAME_MIN}px + ${COL_PUBLICATION + COL_ASSIGNEE + COL_TYPE + COL_DUE}px)`;
 
   return (
     <div className="h-full flex flex-col">
@@ -243,6 +245,7 @@ export function MobileTaskList({
               </HeaderCell>
               <HeaderCell width={COL_PUBLICATION}>Publication</HeaderCell>
               <HeaderCell width={COL_ASSIGNEE}>Assignee</HeaderCell>
+              <HeaderCell width={COL_TYPE}>Type</HeaderCell>
               <HeaderCell width={COL_DUE}>Due Date</HeaderCell>
             </div>
 
@@ -488,6 +491,7 @@ function MobileTaskRow({
   const { data: members } = useWorkspaceMembers(workspaceId);
   const assignee = members?.find((m) => m.id === task.assignee_id);
   const publication = getPublication(task.publication);
+  const taskType = getTaskType(task.type);
   const due = task.due_date ? formatDueDate(task.due_date) : null;
   const done = task.status === "done";
 
@@ -579,6 +583,17 @@ function MobileTaskRow({
               {assignee.full_name ?? "Unnamed"}
             </span>
           </>
+        ) : (
+          <Empty />
+        )}
+      </div>
+
+      <div
+        style={{ width: COL_TYPE, minWidth: COL_TYPE }}
+        className="shrink-0 px-3 py-2 flex items-center"
+      >
+        {taskType ? (
+          <span className="text-xs truncate">{taskType.name}</span>
         ) : (
           <Empty />
         )}

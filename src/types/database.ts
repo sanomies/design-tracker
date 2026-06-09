@@ -185,6 +185,7 @@ export type Database = {
           my_section_id: string | null;
           my_position: number | null;
           publication: string | null;
+          type: string | null;
         };
         Insert: {
           id?: string;
@@ -204,6 +205,7 @@ export type Database = {
           my_section_id?: string | null;
           my_position?: number | null;
           publication?: string | null;
+          type?: string | null;
         };
         Update: {
           id?: string;
@@ -223,6 +225,7 @@ export type Database = {
           my_section_id?: string | null;
           my_position?: number | null;
           publication?: string | null;
+          type?: string | null;
         };
       };
       comments: {

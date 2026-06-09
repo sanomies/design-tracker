@@ -17,6 +17,8 @@ import { DueDatePickerContent } from "./DueDatePicker";
 import { priorityMeta } from "./priority";
 import { PublicationPickerContent } from "./PublicationPicker";
 import { getPublication } from "./publications";
+import { TypePickerContent } from "./TypePicker";
+import { getTaskType } from "./taskTypes";
 import {
   effectiveColumnWidth,
   useColumnOrder,
@@ -78,6 +80,7 @@ export function TaskRow({
   const priority = priorityMeta(task.priority);
   const due = task.due_date ? formatDueDate(task.due_date) : null;
   const publication = getPublication(task.publication);
+  const taskType = getTaskType(task.type);
   const done = task.status === "done";
   const order = useColumnOrder();
   const widths = useColumnWidths();
@@ -134,6 +137,7 @@ export function TaskRow({
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [dueOpen, setDueOpen] = useState(false);
   const [publicationOpen, setPublicationOpen] = useState(false);
+  const [typeOpen, setTypeOpen] = useState(false);
 
   const stopRowClick = (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
@@ -311,6 +315,35 @@ export function TaskRow({
               <EmptyCell />
             )}
           </div>
+        );
+
+      case "type":
+        return (
+          <Popover open={typeOpen} onOpenChange={setTypeOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                onClick={stopRowClick}
+                onKeyDown={stopRowClick}
+                className="w-full flex items-center rounded px-1 py-0.5 hover:bg-accent text-left transition-colors"
+                aria-label={taskType ? `Change type (${taskType.name})` : "Set type"}
+                title={taskType?.name}
+              >
+                {taskType ? (
+                  <span className="text-xs truncate">{taskType.name}</span>
+                ) : (
+                  <EmptyCell />
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="p-1 w-44" onClick={stopRowClick}>
+              <TypePickerContent
+                value={task.type}
+                onChange={(type) => updateTask.mutate({ id: task.id, patch: { type } })}
+                onClose={() => setTypeOpen(false)}
+              />
+            </PopoverContent>
+          </Popover>
         );
     }
   };
