@@ -560,6 +560,11 @@ function DescriptionField({
 }
 
 // Mark complete pill (top-left of the panel) -------------------------
+//
+// Same pill chrome in both states — only the leading icon swaps. The
+// "Completed" state keeps the muted gray pill (no loud-green flood
+// across the chip) and just signals the state via a small green-check
+// glyph; matches Figma node 422:10448.
 
 function MarkCompleteButton({
   done,
@@ -573,19 +578,19 @@ function MarkCompleteButton({
       type="button"
       onClick={onToggle}
       aria-pressed={done}
-      className={cn(
-        "inline-flex items-center gap-2 rounded-full border pl-2 pr-3 py-2 text-xs font-medium transition-colors",
-        done
-          ? "bg-[#00BC7C] border-[#00BC7C] text-white hover:bg-[#00BC7C]/90"
-          : "bg-[#F6F9F9] border-[#DEDFE0] text-foreground hover:bg-[#EDF2F4]"
-      )}
+      className="inline-flex items-center gap-1 rounded-full border border-[#DEDFE0] bg-[#F6F9F9] hover:bg-[#EDF2F4] pl-2 pr-3 py-2 text-xs font-medium text-foreground transition-colors"
     >
       {done ? (
-        <Check className="h-[15px] w-[15px]" strokeWidth={2} aria-hidden />
+        <span
+          aria-hidden
+          className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#00BC7C] text-white"
+        >
+          <Check className="h-3 w-3" strokeWidth={2.5} />
+        </span>
       ) : (
-        <IconCircle className="h-[15px] w-[15px]" aria-hidden />
+        <IconCircle className="h-[18px] w-[18px] text-[#708597]" aria-hidden />
       )}
-      <span>{done ? "Completed" : "Mark complete"}</span>
+      <span>{done ? "Completed" : "Mark as complete"}</span>
     </button>
   );
 }
