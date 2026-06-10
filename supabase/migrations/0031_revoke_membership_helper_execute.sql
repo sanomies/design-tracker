@@ -1,0 +1,31 @@
+-- 0031_revoke_membership_helper_execute.sql — drop the default PUBLIC EXECUTE
+-- on the membership helper so it can't be used as an anon-callable oracle.
+--
+-- Finding E (audit v2): public.user_is_task_workspace_member(uuid, uuid) was
+-- created in 0008 with no REVOKE, so it retains PostgreSQL's default of
+-- EXECUTE to PUBLIC. Any client (even anon, since signup is open) can therefore
+-- call it directly via PostgREST rpc():
+--   supabase.rpc('user_is_task_workspace_member',
+--                { _user_id: <victim>, _task_id: <task> })
+-- and learn, true/false, whether a given user belongs to the workspace that
+-- owns a given task — a cross-tenant membership oracle that bypasses RLS
+-- (the function is SECURITY DEFINER and reads tasks/projects/workspace_members
+-- directly). Low severity (the attacker needs valid UUIDs), but there is no
+-- reason for it to be callable at all.
+--
+-- Why this is safe: the function is only ever invoked from inside SECURITY
+-- DEFINER trigger functions (handle_new_comment, handle_task_assignment,
+-- handle_task_description). Those execute as the function owner, whose EXECUTE
+-- right is unaffected by revoking from PUBLIC, so the triggers keep working.
+-- It is NOT referenced by any RLS policy and is never called from the client
+-- (verified across src/), so revoking direct EXECUTE breaks nothing.
+--
+-- NB: the sibling helper public.task_project_id(uuid) is deliberately LEFT
+-- granted to authenticated — it IS referenced inside RLS policy expressions
+-- (comments/attachments/comment_reactions/storage), and PostgreSQL checks
+-- EXECUTE on policy-referenced functions against the querying role, so
+-- revoking it would break those tables for every authenticated user. Its
+-- task->project_id disclosure is low-value and structurally required; accepted
+-- as residual rather than fixed.
+
+revoke all on function public.user_is_task_workspace_member(uuid, uuid) from public;

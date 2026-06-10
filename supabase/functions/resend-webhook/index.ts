@@ -25,6 +25,35 @@ const supabase = createClient(
   { auth: { persistSession: false } },
 );
 
+// Reject events whose signed timestamp is too far from now. The timestamp is
+// part of the signed payload, so an attacker can't alter it without breaking
+// the signature — bounding it is what stops a captured-but-valid event from
+// being replayed indefinitely (e.g. to keep a victim's email_status pinned to
+// 'bounced'). Matches Svix's default tolerance.
+const TIMESTAMP_TOLERANCE_SECONDS = 5 * 60;
+
+function timestampWithinTolerance(svixTimestamp: string): boolean {
+  const ts = Number(svixTimestamp);
+  if (!Number.isFinite(ts)) return false;
+  const nowSeconds = Date.now() / 1000;
+  return Math.abs(nowSeconds - ts) <= TIMESTAMP_TOLERANCE_SECONDS;
+}
+
+// Constant-time string comparison. `expected` is derived from the webhook
+// secret, so a byte-by-byte early-exit (===) would leak it to a timing attack
+// that forges signatures. The length is public (base64 SHA-256 is fixed-width),
+// so the length check leaks nothing.
+function timingSafeEqual(a: string, b: string): boolean {
+  const aBytes = new TextEncoder().encode(a);
+  const bBytes = new TextEncoder().encode(b);
+  if (aBytes.length !== bBytes.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aBytes.length; i++) {
+    diff |= aBytes[i] ^ bBytes[i];
+  }
+  return diff === 0;
+}
+
 // Svix signature verification — HMAC-SHA256 of `${id}.${timestamp}.${body}`
 // keyed by the webhook secret (the part after "whsec_" base64-decoded).
 async function verifySignature(
@@ -55,7 +84,7 @@ async function verifySignature(
   return svixSignature
     .split(" ")
     .map((part) => part.split(",")[1])
-    .some((sig) => sig === expected);
+    .some((sig) => sig !== undefined && timingSafeEqual(sig, expected));
 }
 
 type ResendEvent = {
@@ -72,6 +101,11 @@ Deno.serve(async (req) => {
   const svixSignature = req.headers.get("svix-signature");
   if (!svixId || !svixTimestamp || !svixSignature) {
     return new Response("Missing svix headers", { status: 400 });
+  }
+
+  // Reject stale/replayed events before doing any work.
+  if (!timestampWithinTolerance(svixTimestamp)) {
+    return new Response("Timestamp outside tolerance", { status: 400 });
   }
 
   const body = await req.text();
