@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { format, isBefore, isToday, isTomorrow, parseISO, startOfDay } from "date-fns";
 import {
   ArrowUpLeft,
+  BadgeCheck,
   Check,
   Newspaper,
   Plus,
@@ -57,6 +58,7 @@ import { CommentComposer, CommentList } from "@/features/comments/CommentList";
 import { useSections } from "@/features/sections/useSections";
 import { SubtaskList } from "@/features/tasks/SubtaskList";
 import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { avatarColor } from "@/lib/avatarColor";
 import { cn } from "@/lib/utils";
 import type { Profile, Task, TaskPriority } from "@/types/database";
@@ -124,6 +126,7 @@ function PanelBody({
   isFullscreen,
   onToggleFullscreen,
 }: DetailPanelProps) {
+  const isMobile = useIsMobile();
   const updateTask = useUpdateTask(task.project_id);
   // Delete + title rename both go through the undoable helpers so the
   // user gets a 6s "Undo" toast for each (deferred delete; immediate
@@ -295,20 +298,30 @@ function PanelBody({
                   Right → Type  · Priority · Section */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0">
               <div className="divide-y divide-[#DEDFE0]">
-                <PropertyRow label="Brand" icon={<Newspaper className="h-[18px] w-[18px] text-foreground" />}>
+                <PropertyRow
+                  label="Brand"
+                  compact={isMobile}
+                  icon={
+                    isMobile ? (
+                      <BadgeCheck className="h-[18px] w-[18px] text-foreground" />
+                    ) : (
+                      <Newspaper className="h-[18px] w-[18px] text-foreground" />
+                    )
+                  }
+                >
                   <PublicationInline
                     value={task.publication}
                     onChange={(publication) => update({ publication })}
                   />
                 </PropertyRow>
-                <PropertyRow label="Assignee" icon={<IconUser className="h-[18px] w-[18px] text-foreground" />}>
+                <PropertyRow label="Assignee" compact={isMobile} icon={<IconUser className="h-[18px] w-[18px] text-foreground" />}>
                   <AssigneeInline
                     members={members ?? []}
                     value={task.assignee_id}
                     onChange={(assignee_id) => update({ assignee_id })}
                   />
                 </PropertyRow>
-                <PropertyRow label="Due Date" icon={<IconCalendar className="h-[18px] w-[18px] text-foreground" />}>
+                <PropertyRow label="Due Date" compact={isMobile} icon={<IconCalendar className="h-[18px] w-[18px] text-foreground" />}>
                   <DueInline
                     value={task.due_date}
                     onChange={(due_date) => update({ due_date })}
@@ -316,20 +329,20 @@ function PanelBody({
                 </PropertyRow>
               </div>
               <div className="divide-y divide-[#DEDFE0]">
-                <PropertyRow label="Type" icon={<Tag className="h-[18px] w-[18px] text-foreground" />}>
+                <PropertyRow label="Type" compact={isMobile} icon={<Tag className="h-[18px] w-[18px] text-foreground" />}>
                   <TypeInline
                     value={task.type}
                     onChange={(type) => update({ type })}
                   />
                 </PropertyRow>
-                <PropertyRow label="Priority" icon={<IconFlag className="h-[18px] w-[18px] text-foreground" />}>
+                <PropertyRow label="Priority" compact={isMobile} icon={<IconFlag className="h-[18px] w-[18px] text-foreground" />}>
                   <PriorityInline
                     value={task.priority}
                     onChange={(priority) => update({ priority })}
                   />
                 </PropertyRow>
                 {(sections.length > 0 || task.section_id) && (
-                  <PropertyRow label="Section" icon={<IconSection className="h-[18px] w-[18px] text-foreground" />}>
+                  <PropertyRow label="Section" compact={isMobile} icon={<IconSection className="h-[18px] w-[18px] text-foreground" />}>
                     <SectionInline
                       sections={sections}
                       value={task.section_id}
@@ -410,18 +423,38 @@ function PanelBody({
   );
 }
 
-// Table-style property row: muted label on the left, inline editable value
-// on the right. The parent applies `divide-y` so a stack of these reads as
-// a thin lined table.
+// Table-style property row. Desktop (default) shows a muted icon + text
+// label in a fixed 80px left column with the inline editable value on the
+// right. Mobile (`compact`) drops the text label entirely — matching the
+// Figma task view (node 428:814), which leads each row with just the 18px
+// icon, a 16px gap, then the value. The parent applies `divide-y` so a
+// stack of these reads as a thin lined table.
 function PropertyRow({
   label,
   icon,
+  compact = false,
   children,
 }: {
   label: string;
   icon?: React.ReactNode;
+  /** Mobile layout: icon + value only, no text label. */
+  compact?: boolean;
   children: React.ReactNode;
 }) {
+  if (compact) {
+    // Icon-only lead, 16px gap to the value. Fixed 44px row height keeps
+    // both columns' hairlines aligned across the grid regardless of cell
+    // content (24px chip vs. plain text vs. pill).
+    return (
+      <div className="flex items-center gap-4 h-[44px]">
+        <span className="inline-flex shrink-0 items-center text-[#708597]" aria-label={label}>
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
+    );
+  }
+
   return (
     // Fixed 44px row height so every row in both columns lines up across
     // the grid, regardless of whether the value cell holds a 24px chip

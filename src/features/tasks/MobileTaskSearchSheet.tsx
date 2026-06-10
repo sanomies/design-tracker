@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Circle } from "lucide-react";
 
 import { IconSearch, IconX } from "@/components/icons/figma";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -75,14 +74,20 @@ export function MobileTaskSearchSheet({
     onOpenChange(false);
   };
 
+  // modal=false keeps the bottom nav (rendered above this at a higher
+  // z-index) visible and tappable, so Search behaves like the Inbox /
+  // My Tasks pages — switching tabs closes it.
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
       <SheetContent
-        side="bottom"
+        // `full` = fade in place (no slide-up); we stop it above the bottom
+        // nav so the nav stays visible, matching the routed pages.
+        side="full"
+        style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
         // Override the SheetContent default close (top-right X) — we
         // render our own clear button inside the input and use a Cancel
         // text button. The built-in X overlaps the input otherwise.
-        className="h-[100dvh] gap-0 p-0 rounded-none border-0 flex flex-col [&>button[aria-label='Close']]:hidden"
+        className="top-0 h-auto gap-0 p-0 rounded-none border-0 flex flex-col [&>button[aria-label='Close']]:hidden"
       >
         <SheetTitle className="sr-only">Search tasks</SheetTitle>
 
@@ -95,8 +100,8 @@ export function MobileTaskSearchSheet({
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search tasks"
-              className="h-10 pl-11 pr-9 text-sm rounded-full border-[#DEDFE0] bg-white placeholder:text-[#708597] focus-visible:ring-1 focus-visible:ring-offset-0"
+              placeholder="Search"
+              className="h-[41px] pl-11 pr-9 text-sm rounded-full border-[#DEDFE0] bg-white placeholder:text-[#708597] focus-visible:ring-1 focus-visible:ring-offset-0"
               aria-label="Search tasks"
               autoComplete="off"
             />
@@ -135,9 +140,9 @@ export function MobileTaskSearchSheet({
                   ? "No tasks match"
                   : `${rows.length} result${rows.length === 1 ? "" : "s"}`}
           </div>
-          <div className="px-2 py-1 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+          <div className="px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
             {showRecents && recentIds.length === 0 && (
-              <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+              <p className="px-1 py-6 text-center text-sm text-muted-foreground">
                 Open a task and it'll show up here.
               </p>
             )}
@@ -171,41 +176,70 @@ function MobileResultRow({
     <button
       type="button"
       onClick={onSelect}
-      className="w-full flex items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors active:bg-[#EDF2F4]"
+      className="flex w-full items-center gap-4 border-b border-[#DEDFE0] py-3 text-left transition-colors active:bg-[#EDF2F4]"
     >
-      {done ? (
-        <Check className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
-      ) : (
-        <Circle className="h-4 w-4 shrink-0 text-muted-foreground/60" aria-hidden />
-      )}
-      <div className="min-w-0 flex-1">
-        <div
-          className={cn(
-            "truncate text-sm",
-            done && "text-muted-foreground line-through"
-          )}
-        >
-          {row.title}
-        </div>
+      <Avatar className="h-9 w-9 shrink-0" title={assignee?.full_name ?? undefined}>
+        <AvatarFallback className={cn("text-xs font-bold", avatarColor(assignee?.id))}>
+          {initials(assignee?.full_name)}
+        </AvatarFallback>
+      </Avatar>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
         {row.project && (
-          <div className="inline-flex items-center gap-1 truncate text-xs text-muted-foreground">
+          <div className="flex items-center gap-1">
             <span
               className="h-2 w-2 shrink-0 rounded-full"
               style={{ backgroundColor: resolveProjectColor(row.project.color) }}
               aria-hidden
             />
-            <span className="truncate">{row.project.name}</span>
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-black">
+              {row.project.name}
+            </span>
           </div>
         )}
+        <div className="flex items-center gap-1">
+          <ResultCheck done={done} />
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-sm text-black",
+              done && "text-black/70 line-through"
+            )}
+          >
+            {row.title}
+          </span>
+        </div>
       </div>
-      {assignee && (
-        <Avatar className="h-6 w-6 shrink-0" title={assignee.full_name ?? undefined}>
-          <AvatarFallback className={cn("text-[10px]", avatarColor(assignee.id))}>
-            {initials(assignee.full_name)}
-          </AvatarFallback>
-        </Avatar>
-      )}
     </button>
+  );
+}
+
+/**
+ * Presentational completion glyph for a search result. Mirrors
+ * [TaskCheckbox] but is non-interactive (the whole row is the tap
+ * target): a 1px #708597 hollow circle when open, a filled #00BC7C
+ * circle with a white check when done.
+ */
+function ResultCheck({ done }: { done: boolean }) {
+  return (
+    <span
+      className={cn(
+        "grid h-[18px] w-[18px] shrink-0 place-content-center rounded-full border",
+        done
+          ? "border-[#00BC7C] bg-[#00BC7C] text-white"
+          : "border-[#708597]/60 text-transparent"
+      )}
+      aria-hidden
+    >
+      <svg viewBox="0 0 18 18" className="h-full w-full" fill="none">
+        <path
+          d="M6.75 9L8.25 10.5L11.25 7.5"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
   );
 }
 

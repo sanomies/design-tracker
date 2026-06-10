@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import DOMPurify from "dompurify";
 import {
@@ -16,7 +16,7 @@ import {
 
 import type { NotificationType } from "@/types/database";
 
-import { IconSearch } from "@/components/icons/figma";
+import { IconBell, IconSearch } from "@/components/icons/figma";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { avatarColor } from "@/lib/avatarColor";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ import {
 import { useProject } from "@/features/projects/useProjects";
 import { TaskDetailPanel } from "@/features/tasks/TaskDetailPanel";
 import { useTasks } from "@/features/tasks/useTasks";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,9 @@ export default function InboxPage() {
   const markRead = useMarkNotificationRead();
   const markUnread = useMarkNotificationUnread();
   const markAllRead = useMarkAllNotificationsRead();
+
+  const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedTaskId = searchParams.get("task");
@@ -111,6 +115,15 @@ export default function InboxPage() {
   const onSelect = (n: NotificationView) => {
     if (!n.read_at) markRead.mutate(n.id);
     if (!n.task_id) return;
+    // On mobile there is no side panel — route into the task's project view
+    // with `?task=` so the existing fullscreen mobile task view takes over.
+    if (isMobile) {
+      const targetProjectId = n.task?.project_id;
+      if (targetProjectId) {
+        navigate(`/projects/${targetProjectId}?task=${n.task_id}`);
+      }
+      return;
+    }
     setSelectedTaskId(n.task_id === selectedTaskId ? null : n.task_id);
   };
 
@@ -125,13 +138,16 @@ export default function InboxPage() {
     <div className="relative h-full flex">
       <section className="flex-1 min-w-0 flex flex-col">
         {/* Sticky header — matches the Figma's `border-b border-r p-[16px]`
-            with the title on the left and a 400px search pill on the right.
-            Mirrors ProjectView's header so the chrome reads as one family. */}
+            with the bell + title + muted count on the left. On desktop a 360px
+            search pill sits at the right (mirrors ProjectView's chrome); on
+            mobile the search lives in the bottom nav, so the header stays the
+            clean bell/title/count row the Figma shows. */}
         <header className="shrink-0 bg-white border-b border-[#DEDFE0] p-4 flex items-center gap-3">
           <div className="flex items-center gap-2 py-2 flex-1 min-w-0">
+            <IconBell className="h-6 w-6 shrink-0 text-foreground" aria-hidden />
             <h1 className="text-lg font-semibold leading-tight">Inbox</h1>
             {unreadCount > 0 && (
-              <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-foreground px-1.5 text-[12px] font-bold text-background">
+              <span className="text-sm font-medium text-[#708597] leading-none">
                 {unreadCount}
               </span>
             )}
@@ -147,16 +163,16 @@ export default function InboxPage() {
               Mark all read
             </Button>
           )}
-          <InboxSearch value={query} onChange={setQuery} />
+          {!isMobile && <InboxSearch value={query} onChange={setQuery} />}
         </header>
 
         {/* Body — gray surface holding white rounded notification cards. */}
         <div className="flex-1 overflow-y-auto bg-[#EDF2F4] p-4">
           {isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-24 w-full rounded-2xl" />
-              <Skeleton className="h-24 w-full rounded-2xl" />
-              <Skeleton className="h-24 w-3/4 rounded-2xl" />
+            <div className="flex flex-col items-center gap-3">
+              <Skeleton className="h-24 w-full max-w-[600px] rounded-2xl" />
+              <Skeleton className="h-24 w-full max-w-[600px] rounded-2xl" />
+              <Skeleton className="h-24 w-3/4 max-w-[600px] rounded-2xl" />
             </div>
           ) : !notifications || notifications.length === 0 ? (
             <EmptyInbox />
@@ -165,12 +181,12 @@ export default function InboxPage() {
               No notifications match “{query}”.
             </p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="flex flex-col items-center gap-3">
               {filtered.map((n) => (
                 <NotificationCard
                   key={n.id}
                   notification={n}
-                  active={!!n.task_id && n.task_id === selectedTaskId}
+                  active={!isMobile && !!n.task_id && n.task_id === selectedTaskId}
                   onSelect={onSelect}
                   onToggleRead={onToggleRead}
                 />
@@ -180,28 +196,32 @@ export default function InboxPage() {
         </div>
       </section>
 
-      <aside
-        aria-hidden={!panelOpen}
-        style={{ width: panelOpen ? panelWidth : 0 }}
-        className={cn(
-          "relative shrink-0 overflow-hidden border-l bg-background",
-          !isResizing && "transition-[width] duration-200 ease-out",
-          panelOpen && "shadow-[-12px_0_28px_-16px_rgba(0,0,0,0.18)]"
-        )}
-      >
-        <div style={{ width: panelWidth }} className="h-full">
-          {selectedTask && (
-            <TaskDetailPanel
-              key={selectedTask.id}
-              task={selectedTask}
-              workspaceId={project?.workspace_id}
-              onClose={closePanel}
-            />
+      {/* Desktop side panel. On mobile we never render it — tapping a card
+          routes into the task's project view as a fullscreen task instead. */}
+      {!isMobile && (
+        <aside
+          aria-hidden={!panelOpen}
+          style={{ width: panelOpen ? panelWidth : 0 }}
+          className={cn(
+            "relative shrink-0 overflow-hidden border-l bg-background",
+            !isResizing && "transition-[width] duration-200 ease-out",
+            panelOpen && "shadow-[-12px_0_28px_-16px_rgba(0,0,0,0.18)]"
           )}
-        </div>
-      </aside>
+        >
+          <div style={{ width: panelWidth }} className="h-full">
+            {selectedTask && (
+              <TaskDetailPanel
+                key={selectedTask.id}
+                task={selectedTask}
+                workspaceId={project?.workspace_id}
+                onClose={closePanel}
+              />
+            )}
+          </div>
+        </aside>
+      )}
 
-      {panelOpen && (
+      {!isMobile && panelOpen && (
         <button
           type="button"
           aria-label="Resize panel"
@@ -312,7 +332,7 @@ function NotificationCard({
   const project = notification.task?.project ?? null;
 
   return (
-    <li>
+    <li className="w-full max-w-[600px]">
       <button
         type="button"
         onClick={() => onSelect(notification)}
@@ -328,88 +348,86 @@ function NotificationCard({
               : "hover:ring-1 hover:ring-foreground/10"
         )}
       >
-        <div className="flex flex-1 min-w-0 gap-4 max-w-[800px] mx-auto w-full">
-          <Avatar className="h-9 w-9 shrink-0">
-            <AvatarFallback
-              className={cn(
-                "text-xs font-bold",
-                avatarColor(notification.actor?.id)
-              )}
-            >
-              {initials(actorName)}
-            </AvatarFallback>
-          </Avatar>
-
-          <div className="flex-1 min-w-0 space-y-1">
-            {project && (
-              <div className="flex items-center gap-1.5">
-                <span
-                  className="h-2 w-2 rounded-full shrink-0"
-                  style={{ backgroundColor: resolveProjectColor(project.color) }}
-                  aria-hidden
-                />
-                <span className="text-xs font-medium text-foreground truncate">
-                  {project.name}
-                </span>
-              </div>
+        <Avatar className="h-9 w-9 shrink-0">
+          <AvatarFallback
+            className={cn(
+              "text-xs font-bold",
+              avatarColor(notification.actor?.id)
             )}
+          >
+            {initials(actorName)}
+          </AvatarFallback>
+        </Avatar>
 
-            <div className="flex items-center gap-1.5 text-xs">
-              <Icon
-                className="h-[18px] w-[18px] shrink-0 text-foreground"
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+          {project && (
+            <div className="flex items-center gap-1.5">
+              <span
+                className="h-2 w-2 rounded-full shrink-0"
+                style={{ backgroundColor: resolveProjectColor(project.color) }}
                 aria-hidden
               />
-              <span className="font-semibold text-foreground truncate">
-                {actorName}
-              </span>
-              <span className="font-semibold text-[#708597] truncate">
-                {verb}
+              <span className="text-xs font-medium text-foreground truncate">
+                {project.name}
               </span>
             </div>
+          )}
 
-            <p className="text-lg font-semibold leading-snug truncate">
-              {title}
-            </p>
-
-            {preview && (
-              <p className="text-xs text-[#708597] line-clamp-2 whitespace-pre-line">
-                {preview}
-              </p>
-            )}
-
-            <p className="text-[10px] text-[#708597]">
-              {formatDistanceToNow(parseISO(notification.created_at), {
-                addSuffix: true,
-              })}
-            </p>
+          <div className="flex items-center gap-1.5 text-xs min-w-0">
+            <Icon
+              className="h-[18px] w-[18px] shrink-0 text-foreground"
+              aria-hidden
+            />
+            <span className="font-semibold text-foreground truncate">
+              {actorName}
+            </span>
+            <span className="font-semibold text-[#708597] shrink-0 whitespace-nowrap">
+              {verb}
+            </span>
           </div>
 
-          {/* Read/unread toggle dot. Solid when unread; outlined-on-hover
-              when read so handled rows stay quiet. */}
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
+          <p className="text-lg font-semibold leading-[1.4] line-clamp-2">
+            {title}
+          </p>
+
+          {preview && (
+            <p className="text-xs text-[#708597] line-clamp-2 whitespace-pre-line">
+              {preview}
+            </p>
+          )}
+
+          <p className="text-[10px] text-[#708597]">
+            {formatDistanceToNow(parseISO(notification.created_at), {
+              addSuffix: true,
+            })}
+          </p>
+        </div>
+
+        {/* Read/unread toggle dot. Solid when unread; outlined-on-hover
+            when read so handled rows stay quiet. */}
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleRead(notification);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
               e.stopPropagation();
               onToggleRead(notification);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-                onToggleRead(notification);
-              }
-            }}
-            className={cn(
-              "mt-1 h-2.5 w-2.5 rounded-full shrink-0 cursor-pointer transition",
-              isUnread
-                ? "bg-[#3858F5] hover:bg-[#3858F5]/70"
-                : "border border-[#708597]/40 hover:border-foreground opacity-0 group-hover:opacity-100"
-            )}
-            aria-label={isUnread ? "Mark as read" : "Mark as unread"}
-            title={isUnread ? "Mark as read" : "Mark as unread"}
-          />
-        </div>
+            }
+          }}
+          className={cn(
+            "mt-1 h-2.5 w-2.5 rounded-full shrink-0 cursor-pointer transition",
+            isUnread
+              ? "bg-[#3858F5] hover:bg-[#3858F5]/70"
+              : "border border-[#708597]/40 hover:border-foreground opacity-0 group-hover:opacity-100"
+          )}
+          aria-label={isUnread ? "Mark as read" : "Mark as unread"}
+          title={isUnread ? "Mark as read" : "Mark as unread"}
+        />
       </button>
     </li>
   );

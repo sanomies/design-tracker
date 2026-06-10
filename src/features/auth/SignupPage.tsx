@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 
 import { useAuth } from "./AuthProvider";
-import { AuthShell, Field } from "./LoginPage";
+import { AuthShell, Field, AUTH_INPUT_CLASS, AUTH_SUBMIT_CLASS } from "./LoginPage";
 import { signUpSchema, type SignUpValues } from "./schemas";
 
 export default function SignupPage() {
@@ -75,27 +75,42 @@ export default function SignupPage() {
             id="fullName"
             autoComplete="name"
             autoFocus
+            className={AUTH_INPUT_CLASS}
             {...form.register("fullName")}
           />
         </Field>
-        <Field id="email" label="Email" error={form.formState.errors.email?.message}>
-          <Input id="email" type="email" autoComplete="email" {...form.register("email")} />
+        <Field id="email" label="E-mail" error={form.formState.errors.email?.message}>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            className={AUTH_INPUT_CLASS}
+            {...form.register("email")}
+          />
         </Field>
         <Field id="password" label="Password" error={form.formState.errors.password?.message}>
           <Input
             id="password"
             type="password"
             autoComplete="new-password"
+            className={AUTH_INPUT_CLASS}
             {...form.register("password")}
           />
         </Field>
-        <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+        <Button
+          type="submit"
+          className={AUTH_SUBMIT_CLASS}
+          disabled={form.formState.isSubmitting}
+        >
           {form.formState.isSubmitting ? "Creating account…" : "Sign up"}
         </Button>
       </form>
-      <p className="text-sm text-muted-foreground text-center mt-6">
-        Already have an account?{" "}
-        <Link to="/login" className="text-foreground underline underline-offset-4">
+      <p className="text-sm text-center mt-5">
+        <span className="font-medium text-[#708597]">Already have an account?</span>{" "}
+        <Link
+          to="/login"
+          className="font-semibold text-black underline underline-offset-2"
+        >
           Sign in
         </Link>
       </p>

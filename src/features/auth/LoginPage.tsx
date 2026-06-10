@@ -41,12 +41,13 @@ export default function LoginPage() {
   return (
     <AuthShell title="Welcome back" subtitle="Sign in to continue">
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <Field id="email" label="Email" error={form.formState.errors.email?.message}>
+        <Field id="email" label="E-mail" error={form.formState.errors.email?.message}>
           <Input
             id="email"
             type="email"
             autoComplete="email"
             autoFocus
+            className={AUTH_INPUT_CLASS}
             {...form.register("email")}
           />
         </Field>
@@ -55,22 +56,37 @@ export default function LoginPage() {
             id="password"
             type="password"
             autoComplete="current-password"
+            className={AUTH_INPUT_CLASS}
             {...form.register("password")}
           />
         </Field>
-        <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+        <Button
+          type="submit"
+          className={AUTH_SUBMIT_CLASS}
+          disabled={form.formState.isSubmitting}
+        >
           {form.formState.isSubmitting ? "Signing in…" : "Sign in"}
         </Button>
       </form>
-      <p className="text-sm text-muted-foreground text-center mt-6">
-        No account?{" "}
-        <Link to="/signup" className="text-foreground underline underline-offset-4">
+      <p className="text-sm text-center mt-5">
+        <span className="font-medium text-[#708597]">No account?</span>{" "}
+        <Link
+          to="/signup"
+          className="font-semibold text-black underline underline-offset-2"
+        >
           Sign up
         </Link>
       </p>
     </AuthShell>
   );
 }
+
+// Shared field styling so both auth screens match the Figma spec 1:1
+// (full-width, h-12, rounded-lg, #DEDFE0 border, comfortable padding).
+export const AUTH_INPUT_CLASS =
+  "h-12 rounded-lg border-[#DEDFE0] bg-white px-4 text-base md:text-base";
+export const AUTH_SUBMIT_CLASS =
+  "w-full h-12 rounded-lg bg-foreground text-white font-semibold hover:bg-foreground/90";
 
 // Shared shell + field — kept local to auth pages; promote to /components if reused elsewhere.
 export function AuthShell({
@@ -83,18 +99,25 @@ export function AuthShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-dvh flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 flex flex-col items-center text-center">
+    <div className="min-h-dvh flex items-center justify-center px-6 py-9">
+      <div className="w-full max-w-sm flex flex-col gap-9">
+        {/* Block (not flex) + text-center so a long title like "Create your
+            account" wraps inside the card instead of growing to its
+            max-content width and overflowing the viewport. */}
+        <div className="w-full text-center">
           <img
             src={osanoLogo}
             alt="oSano"
-            className="h-[30px] w-auto mb-6 shrink-0"
+            className="h-[34px] w-auto mx-auto mb-4 shrink-0"
           />
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+          <h1 className="text-[32px] leading-tight font-bold tracking-tight text-black break-words">
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="mt-2 text-sm font-medium text-[#708597]">{subtitle}</p>
+          )}
         </div>
-        {children}
+        <div className="w-full">{children}</div>
       </div>
     </div>
   );
@@ -112,8 +135,10 @@ export function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
+    <div className="space-y-2">
+      <Label htmlFor={id} className="text-sm font-semibold text-black">
+        {label}
+      </Label>
       {children}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>

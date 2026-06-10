@@ -100,29 +100,30 @@ export default function ProjectView() {
         {/* Header + action row are visually one block in the Figma —
             16px outer padding with an 8px gap between the rows. The
             action row (rendered inside TaskList) owns the 8px via its
-            own `pt-2`; the header here keeps `pb-0`. */}
-        <header className="px-4 pt-4 pb-0 flex items-center gap-3 shrink-0">
-          {projectsLoading ? (
-            <Skeleton className="h-7 w-48" />
-          ) : project ? (
-            <div className="flex items-center gap-2 py-2">
-              <ProjectLetterPill color={project.color} name={project.name} />
-              <h1 className="text-lg font-semibold leading-tight">{project.name}</h1>
-            </div>
-          ) : (
-            <p className="text-sm text-[#708597]">Project not found</p>
-          )}
-          {/* flex-1 + justify-end lets the search grow into all
-              remaining header width; the combobox itself caps at
-              400px and stays right-aligned within. On mobile, search
-              lives in the bottom tab bar instead, so the header just
-              shows the project pill + title. */}
-          {!isMobile && (
+            own `pt-2`; the header here keeps `pb-0`. On mobile the header
+            (project chip + title) is rendered INSIDE MobileTaskList so the
+            whole board scrolls as one column and the chip aligns with the
+            board's own padding — so this desktop header is hidden there. */}
+        {!isMobile && (
+          <header className="px-4 pt-4 pb-0 flex items-center gap-3 shrink-0">
+            {projectsLoading ? (
+              <Skeleton className="h-7 w-48" />
+            ) : project ? (
+              <div className="flex items-center gap-2 py-2">
+                <ProjectLetterPill color={project.color} name={project.name} />
+                <h1 className="text-lg font-semibold leading-tight">{project.name}</h1>
+              </div>
+            ) : (
+              <p className="text-sm text-[#708597]">Project not found</p>
+            )}
+            {/* flex-1 + justify-end lets the search grow into all
+                remaining header width; the combobox itself caps at
+                400px and stays right-aligned within. */}
             <div className="ml-auto flex-1 flex justify-end">
               <TaskSearchCombobox workspaceId={workspace?.id} />
             </div>
-          )}
-        </header>
+          </header>
+        )}
 
         {/* TaskList owns its own scrolling so the Done section can stay
             docked at the bottom. Outer wrapper just needs to be a flex
@@ -133,7 +134,12 @@ export default function ProjectView() {
             shared TaskList's hook count mid-render. */}
         <div className="flex-1 min-h-0">
           {isMobile ? (
-            <MobileTaskList projectId={projectId} workspaceId={workspace?.id} />
+            <MobileTaskList
+              projectId={projectId}
+              workspaceId={workspace?.id}
+              projectName={project?.name ?? ""}
+              projectColor={project?.color}
+            />
           ) : (
             <TaskList projectId={projectId} workspaceId={workspace?.id} />
           )}

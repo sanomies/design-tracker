@@ -74,7 +74,9 @@ import {
   useReorderMySection,
   useMySections,
 } from "@/features/tasks/useMySections";
+import { MobileMyTasksList } from "@/features/tasks/MobileTaskList";
 import { useMyTasks, useUpdateMyTask, type MyTaskRow } from "@/features/tasks/useMyTasks";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useResizableHeight } from "@/hooks/useResizableHeight";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { cn } from "@/lib/utils";
@@ -101,6 +103,15 @@ function toSectionShim(s: MyTaskSection): Section {
 }
 
 export default function MyTasksPage() {
+  // Switch at the top level so the breakpoint flip mounts/unmounts entirely
+  // separate trees — the desktop body below carries far more hooks (DnD,
+  // resizable panes, context menu) than the mobile board, so swapping the
+  // inner content conditionally would change the hook count mid-render.
+  const isMobile = useIsMobile();
+  return isMobile ? <MyTasksMobile /> : <MyTasksDesktop />;
+}
+
+function MyTasksDesktop() {
   const { data: tasks, isLoading: tasksLoading } = useMyTasks();
   const { data: sections = [], isLoading: sectionsLoading } = useMySections();
   const updateTask = useUpdateMyTask();
@@ -983,6 +994,68 @@ export default function MyTasksPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+/**
+ * Mobile My Tasks — reuses the shared mobile board (pinned Name column +
+ * horizontal-scroll metadata) driven by the my-task sections data, and
+ * renders the task detail panel as a full-screen overlay that stops just
+ * above the bottom tab bar (matching the project view's mobile behavior).
+ */
+function MyTasksMobile() {
+  const { data: tasks } = useMyTasks();
+  const allTasks = tasks ?? [];
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedTaskId = searchParams.get("task");
+  const selectedTask = allTasks.find((t) => t.id === selectedTaskId) ?? null;
+
+  useEffect(() => {
+    if (selectedTaskId) recordTaskOpened(selectedTaskId);
+  }, [selectedTaskId]);
+
+  const closePanel = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("task");
+    setSearchParams(next, { replace: true });
+  };
+
+  // Esc closes the panel unless a dialog/menu is open first.
+  useEffect(() => {
+    if (!selectedTask) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const blocking =
+        document.querySelector('[role="dialog"][data-state="open"]') ||
+        document.querySelector('[role="menu"][data-state="open"]') ||
+        document.querySelector('[role="listbox"][data-state="open"]');
+      if (blocking) return;
+      closePanel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTask, searchParams]);
+
+  return (
+    <div className="relative h-full">
+      <MobileMyTasksList />
+
+      {selectedTask && (
+        // Stops above the 56px bottom tab bar (+ safe area) so the nav stays
+        // reachable while a task is open — same as the project view.
+        <div className="fixed inset-x-0 top-0 z-50 bg-background bottom-[calc(3.5rem+env(safe-area-inset-bottom))]">
+          <TaskDetailPanel
+            key={`${selectedTask.id}-fs`}
+            task={selectedTask}
+            workspaceId={selectedTask.project?.workspace_id}
+            onClose={closePanel}
+            isFullscreen
+          />
+        </div>
+      )}
     </div>
   );
 }
