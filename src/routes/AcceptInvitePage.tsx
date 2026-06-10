@@ -14,11 +14,19 @@ import {
 
 export default function AcceptInvitePage() {
   const { token } = useParams<{ token: string }>();
-  const { user, loading } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const { setCurrentWorkspaceId } = useCurrentWorkspaceId();
   const { data: invitation, isLoading, error } = useInvitationByToken(token);
   const accept = useAcceptInvitation();
+
+  // Email-bound invites can only be accepted by the addressed account. The
+  // server enforces this in accept_invitation(); we mirror the check here so a
+  // signed-in-as-the-wrong-account user gets a clear message instead of a
+  // failing RPC (which would otherwise re-fire the auto-accept effect).
+  const invitedEmail = invitation?.invited_email?.trim().toLowerCase() || null;
+  const currentEmail = user?.email?.trim().toLowerCase() || null;
+  const emailMismatch = !!user && !!invitedEmail && invitedEmail !== currentEmail;
 
   // Auto-accept the moment the page loads with an authed user and a valid
   // invitation. Saves the user a redundant click.
@@ -29,7 +37,8 @@ export default function AcceptInvitePage() {
     if (!invitation) return;
     if (invitation.accepted_at) return;
     if (parseISO(invitation.expires_at).getTime() < Date.now()) return;
-    if (accept.isPending || accept.isSuccess) return;
+    if (emailMismatch) return;
+    if (accept.isPending || accept.isSuccess || accept.isError) return;
 
     accept.mutate(token, {
       onSuccess: (workspaceId) => {
@@ -41,7 +50,7 @@ export default function AcceptInvitePage() {
         toast.error(err instanceof Error ? err.message : "Failed to accept invite");
       },
     });
-  }, [token, loading, user, invitation, accept, navigate, setCurrentWorkspaceId]);
+  }, [token, loading, user, invitation, emailMismatch, accept, navigate, setCurrentWorkspaceId]);
 
   if (!token) return <Navigate to="/" replace />;
 
@@ -129,6 +138,45 @@ export default function AcceptInvitePage() {
           <p className="text-xs text-muted-foreground mt-2">
             Signing up? Click the confirmation email, then re-open this invite link to finish joining.
           </p>
+        </Card>
+      </AuthShell>
+    );
+  }
+
+  // Email-bound invite opened by the wrong account: don't auto-accept, explain
+  // how to fix it.
+  if (emailMismatch) {
+    return (
+      <AuthShell title="Wrong account">
+        <Card>
+          <p className="text-sm">
+            This invitation was sent to{" "}
+            <strong>{invitation.invited_email}</strong>, but you're signed in as{" "}
+            <strong>{user.email}</strong>.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Sign out and sign back in with {invitation.invited_email} to accept it.
+          </p>
+          <Button variant="outline" onClick={() => void signOut()}>
+            Sign out
+          </Button>
+        </Card>
+      </AuthShell>
+    );
+  }
+
+  // Acceptance failed (e.g. revoked between load and accept). Surface it
+  // instead of spinning forever.
+  if (accept.isError) {
+    return (
+      <AuthShell title="Couldn't join">
+        <Card>
+          <p className="text-sm">
+            {accept.error instanceof Error
+              ? accept.error.message
+              : "We couldn't accept this invitation. Ask for a fresh link."}
+          </p>
+          <BackToSignIn />
         </Card>
       </AuthShell>
     );

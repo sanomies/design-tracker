@@ -132,7 +132,8 @@ function Body({ workspace }: { workspace: Workspace }) {
           </Button>
         </form>
         <p className="text-xs text-muted-foreground">
-          The email is just for your reference — anyone with the link can accept.
+          Add an email to lock the invite to that person — only they can accept it.
+          Leave it blank for an open link anyone can use.
         </p>
       </section>
 

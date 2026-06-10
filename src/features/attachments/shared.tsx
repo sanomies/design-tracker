@@ -138,7 +138,14 @@ export async function downloadAttachmentsAsZip(
 
 export async function openAttachmentInTab(attachment: Attachment): Promise<void> {
   try {
-    const url = await getSignedAttachmentUrl(attachment.storage_path);
+    // Force a download disposition. A signed URL WITHOUT one renders an
+    // HTML/SVG attachment inline on the storage origin, executing script there
+    // (stored XSS). With Content-Disposition: attachment the browser downloads
+    // it instead, which is safe for every file type. Images preview via the
+    // in-app lightbox, so no inline-render affordance is lost for them.
+    const url = await getSignedAttachmentUrl(attachment.storage_path, {
+      download: attachment.file_name,
+    });
     window.open(url, "_blank", "noopener,noreferrer");
   } catch {
     toast.error("Failed to open attachment");
