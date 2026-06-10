@@ -798,7 +798,7 @@ function DueInline({
             onChange(date ? format(date, "yyyy-MM-dd") : null);
             setOpen(false);
           }}
-          initialFocus
+          autoFocus
         />
         {selected && (
           <div className="border-t p-2">

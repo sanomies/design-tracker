@@ -1,6 +1,5 @@
 import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
 import { EditorContent, ReactRenderer, useEditor, type Editor } from "@tiptap/react";
-import type { Range } from "@tiptap/core";
 import { toast } from "sonner";
 import StarterKit from "@tiptap/starter-kit";
 import Mention from "@tiptap/extension-mention";

@@ -33,6 +33,7 @@ export type Database = {
           email_status?: "ok" | "bounced" | "complained";
           created_at?: string;
         };
+        Relationships: [];
       };
       workspaces: {
         Row: {
@@ -53,6 +54,7 @@ export type Database = {
           owner_id?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       workspace_members: {
         Row: {
@@ -73,6 +75,7 @@ export type Database = {
           role?: WorkspaceRole;
           created_at?: string;
         };
+        Relationships: [];
       };
       projects: {
         Row: {
@@ -99,6 +102,7 @@ export type Database = {
           position?: number;
           created_at?: string;
         };
+        Relationships: [];
       };
       project_members: {
         Row: {
@@ -116,6 +120,7 @@ export type Database = {
           user_id?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       sections: {
         Row: {
@@ -142,6 +147,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
         };
+        Relationships: [];
       };
       my_task_sections: {
         Row: {
@@ -165,6 +171,7 @@ export type Database = {
           position?: number;
           created_at?: string;
         };
+        Relationships: [];
       };
       tasks: {
         Row: {
@@ -227,6 +234,17 @@ export type Database = {
           publication?: string | null;
           type?: string | null;
         };
+        // Only the FK actually used by embedded selects in the app
+        // (`select("*, project:projects(...)")`) needs to be declared here.
+        Relationships: [
+          {
+            foreignKeyName: "tasks_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       comments: {
         Row: {
@@ -250,6 +268,7 @@ export type Database = {
           body?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       notifications: {
         Row: {
@@ -306,6 +325,7 @@ export type Database = {
           read_at?: string | null;
           created_at?: string;
         };
+        Relationships: [];
       };
       workspace_invitations: {
         Row: {
@@ -344,6 +364,7 @@ export type Database = {
           accepted_at?: string | null;
           accepted_by?: string | null;
         };
+        Relationships: [];
       };
       comment_reactions: {
         Row: {
@@ -367,6 +388,7 @@ export type Database = {
           emoji?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       attachments: {
         Row: {
@@ -399,6 +421,7 @@ export type Database = {
           storage_path?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       email_preferences: {
         Row: {
@@ -428,6 +451,7 @@ export type Database = {
           unsubscribe_token?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       email_log: {
         Row: {
@@ -472,8 +496,10 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
     Functions: {
       is_workspace_member: {
         Args: { _workspace_id: string };

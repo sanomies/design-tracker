@@ -15,8 +15,12 @@ import { cn } from "@/lib/utils";
  * Figma frame (grip handles, dialog menu glyphs, etc.).
  */
 
-type IconProps = Omit<SVGProps<SVGSVGElement>, "stroke" | "fill" | "viewBox"> & {
+type IconProps = Omit<SVGProps<SVGSVGElement>, "stroke" | "fill" | "viewBox" | "strokeWidth"> & {
   className?: string;
+  // SVGProps types strokeWidth as string | number; the Svg wrappers below
+  // narrow it to number, so the intersection must agree or every spread
+  // of IconProps into a wrapper fails to typecheck.
+  strokeWidth?: number;
 };
 
 function Svg24({

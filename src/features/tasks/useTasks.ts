@@ -100,6 +100,7 @@ export function useCreateTask(projectId: string | undefined) {
         my_section_id: null,
         my_position: null,
         publication: null,
+        type: null,
       };
       qc.setQueryData<Task[]>(tasksKey(projectId), (old = []) => [...old, optimistic]);
       return { previous };

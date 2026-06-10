@@ -31,7 +31,7 @@ export function DueDatePickerContent({
           onChange(date ? format(date, "yyyy-MM-dd") : null);
           onClose();
         }}
-        initialFocus
+        autoFocus
       />
       {selected && (
         <div className="border-t p-2">

@@ -9,7 +9,12 @@ export type SlashCommandPayload = {
 };
 
 type SlashOptions = {
-  suggestion: Omit<SuggestionOptions<SlashCommandPayload>, "editor">;
+  // Item type is intentionally left at SuggestionOptions' default (`any`):
+  // the host owns the concrete item shape (payload + menu label/icon), and
+  // SuggestionOptions' render callbacks are contravariant in it, so pinning
+  // SlashCommandPayload here would reject any richer item type. Same
+  // approach as tiptap's own Mention extension.
+  suggestion: Omit<SuggestionOptions, "editor">;
 };
 
 /**
