@@ -175,13 +175,27 @@ async function loadInvitationContext(invitationId: string): Promise<Notification
     manage_prefs_url: buildAppUrl("/settings/email"),
   };
 
+  // Honor the recipient's bounce/complaint + invite opt-out state when they
+  // already have an account (migration 0033). Brand-new invitees have no
+  // record and are never suppressed, so the invite flow is unaffected for
+  // them. Fail-open on a lookup error: a transient failure must not silently
+  // drop a legitimate invite. A null template routes to the handler's
+  // existing "skipped (opt_out)" path.
+  let inviteSuppressed = false;
+  {
+    const { data, error } = await supabase.rpc("invite_email_suppressed", {
+      _email: inv.invited_email,
+    });
+    if (!error) inviteSuppressed = data === true;
+  }
+
   return {
     recipientEmail: inv.invited_email,
     recipientName: null,
     recipientId: "00000000-0000-0000-0000-000000000000",
     prefs: fakePrefs,
     emailStatus: "ok",
-    template: "workspace_invite",
+    template: inviteSuppressed ? null : "workspace_invite",
     vars,
   };
 }
