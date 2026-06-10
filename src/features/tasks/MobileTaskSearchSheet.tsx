@@ -84,15 +84,15 @@ export function MobileTaskSearchSheet({
         // nav so the nav stays visible, matching the routed pages.
         side="full"
         style={{ bottom: "calc(3.5rem + env(safe-area-inset-bottom))" }}
-        // Override the SheetContent default close (top-right X) — we
-        // render our own clear button inside the input and use a Cancel
-        // text button. The built-in X overlaps the input otherwise.
-        className="top-0 h-auto gap-0 p-0 rounded-none border-0 flex flex-col [&>button[aria-label='Close']]:hidden"
+        // Hide the SheetContent default close (top-right X) — it's Radix's
+        // last direct-child <button>. Search is dismissed by tapping another
+        // nav tab (like Inbox / My Tasks), so no X or Cancel is needed.
+        className="top-0 h-auto gap-0 p-0 rounded-none border-0 flex flex-col [&>button]:hidden"
       >
         <SheetTitle className="sr-only">Search tasks</SheetTitle>
 
-        <header className="shrink-0 flex items-center gap-2 px-4 pt-4 pb-3 border-b border-[#DEDFE0]">
-          <div className="relative flex-1">
+        <header className="shrink-0 px-4 pt-4 pb-3 border-b border-[#DEDFE0]">
+          <div className="relative w-full">
             <IconSearch
               className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#708597] pointer-events-none"
             />
@@ -119,13 +119,6 @@ export function MobileTaskSearchSheet({
               </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="shrink-0 px-2 py-2 text-sm font-medium text-foreground"
-          >
-            Cancel
-          </button>
         </header>
 
         <div className="flex-1 min-h-0 overflow-y-auto">
