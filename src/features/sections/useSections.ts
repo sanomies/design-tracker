@@ -140,11 +140,14 @@ export function useReorderSection(projectId: string | undefined) {
       if (error) throw error;
     },
     onMutate: async ({ id, position }) => {
-      await qc.cancelQueries({ queryKey: sectionsKey(projectId) });
+      // Optimistic write FIRST so it lands in the same synchronous
+      // task as the caller's setState (e.g. setActiveId(null) on drop).
+      // See useUpdateTask.onMutate for the full rationale.
       const previous = qc.getQueryData<Section[]>(sectionsKey(projectId));
       qc.setQueryData<Section[]>(sectionsKey(projectId), (old = []) =>
         old.map((s) => (s.id === id ? { ...s, position } : s))
       );
+      await qc.cancelQueries({ queryKey: sectionsKey(projectId) });
       return { previous };
     },
     onError: (_err, _vars, context) => {

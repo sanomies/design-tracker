@@ -255,3 +255,69 @@ export function useNameWidth(): number {
     () => cachedNameWidth
   );
 }
+
+// --- Persisted column visibility -------------------------------------
+//
+// Lets the user hide/show metadata columns from the task list view via
+// the settings dropdown at the end of the column header. Default = all
+// columns visible. Stored as the set of HIDDEN column ids so newly-
+// added columns automatically appear without a storage migration.
+
+const VISIBILITY_STORAGE_KEY = "design-tracker:task-column-hidden";
+
+function readHidden(): Set<ColumnId> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(VISIBILITY_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(
+      parsed.filter((id): id is ColumnId =>
+        (DEFAULT_COLUMN_ORDER as readonly string[]).includes(id as string)
+      )
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+let cachedHidden: Set<ColumnId> = readHidden();
+const hiddenListeners = new Set<() => void>();
+
+function notifyHidden() {
+  for (const l of hiddenListeners) l();
+}
+
+export function setColumnVisible(id: ColumnId, visible: boolean) {
+  const next = new Set(cachedHidden);
+  if (visible) next.delete(id);
+  else next.add(id);
+  if (next.size === cachedHidden.size && [...next].every((x) => cachedHidden.has(x))) {
+    return;
+  }
+  cachedHidden = next;
+  try {
+    localStorage.setItem(VISIBILITY_STORAGE_KEY, JSON.stringify([...next]));
+  } catch {
+    // ignore quota / private mode
+  }
+  notifyHidden();
+}
+
+function subscribeHidden(cb: () => void) {
+  hiddenListeners.add(cb);
+  return () => {
+    hiddenListeners.delete(cb);
+  };
+}
+
+/** Returns the set of HIDDEN column ids. Components typically want to
+ *  filter `useColumnOrder()` by this set rather than read it directly. */
+export function useHiddenColumns(): Set<ColumnId> {
+  return useSyncExternalStore(
+    subscribeHidden,
+    () => cachedHidden,
+    () => cachedHidden
+  );
+}

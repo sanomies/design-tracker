@@ -93,6 +93,14 @@ export function SectionBlock({
     await onAddTask(t);
   };
 
+  // `isOver` (from the section's useDroppable) is intentionally unused
+  // for visuals here — flashing a colored background each time the
+  // cursor enters a section while sorting was distracting, especially
+  // for within-section moves where the cursor IS the section. The drop
+  // indicator comes from the destination tasks shifting open (via the
+  // unified SortableContext at the TaskList level); empty-section drops
+  // still work because the droppable ref is still attached below.
+  void isOver;
   return (
     <section
       ref={dropRef}
@@ -102,14 +110,24 @@ export function SectionBlock({
         // and the pinned Unassigned bucket reading as distinct blocks. The
         // truly headerless variant (project view's unsectioned group)
         // stays flush with the input above it.
-        hasHeader && "pt-6 pb-2",
-        isOver && "bg-primary/5"
+        hasHeader && "pt-6 pb-2"
       )}
     >
       {hasHeader && (
-        <header className="group flex items-center gap-2 px-2 py-2 hover:bg-[#EDF2F4]/60 rounded-md transition-colors mx-2">
+        // Whole header is the drag activator — mirrors how the sidebar's
+        // project rows work. Click-vs-drag disambiguates automatically
+        // via the DndContext's 8px activation distance: <8px movement
+        // counts as a click (and the only clickable child is the
+        // collapse chevron); >8px starts a section reorder. The chevron
+        // + actions dropdown each stop pointer propagation so a click
+        // on either never arms a drag.
+        <header
+          className="group flex items-center gap-2 px-2 py-2 hover:bg-[#EDF2F4]/60 rounded-md transition-colors mx-2 cursor-grab active:cursor-grabbing"
+          {...(dragListeners ?? {})}
+        >
           <button
             type="button"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={onToggleCollapsed}
             className="h-[18px] w-[18px] flex items-center justify-center text-foreground/80 hover:text-foreground rounded"
             aria-label={collapsed ? "Expand section" : "Collapse section"}
@@ -133,6 +151,7 @@ export function SectionBlock({
                   <Button
                     variant="ghost"
                     size="icon"
+                    onPointerDown={(e) => e.stopPropagation()}
                     className="h-6 w-6"
                     aria-label={`Actions for ${headerLabel}`}
                   >
@@ -160,6 +179,15 @@ export function SectionBlock({
 
       {(!hasHeader || !collapsed) && (
         <>
+          {/* Per-section task SortableContext. Each section is its own
+              "sortable ring" — tasks within a section reorder visually,
+              and a cross-section drag still works data-wise (the dnd-kit
+              `DndContext`-wide closestCenter picks tasks in other
+              sections as the over target, and onDragEnd updates
+              section_id). Trying to unify ALL tasks into one outer
+              SortableContext caused compounding transforms with the
+              section wrapper and produced jitter, so we keep them
+              per-section. */}
           <SortableContext
             items={tasks.map((t) => t.id)}
             strategy={verticalListSortingStrategy}

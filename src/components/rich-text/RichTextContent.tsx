@@ -3,6 +3,7 @@ import DOMPurify from "dompurify";
 
 import { cn } from "@/lib/utils";
 
+import { FigmaEmbed, isFigmaUrl } from "./FigmaEmbed";
 import { htmlToReact } from "./htmlToReact";
 import { InlineFileCard } from "./InlineFileCard";
 import { InlineImage } from "./InlineImage";
@@ -57,11 +58,21 @@ export function RichTextContent({ html, className, onDeleteImage }: Props) {
             onDelete={onDeleteImage}
           />
         ),
-        // Swap any link pointing at the task-images bucket for a file
-        // card. These are the non-image files inserted via drop/paste in
-        // the editor (PDFs etc.). External links render normally.
+        // Anchor swap:
+        // 1. figma.com links unfurl to an inline preview iframe
+        //    (Asana-style link preview).
+        // 2. Links pointing at the task-images bucket render as file
+        //    cards (PDFs / docs / etc. inserted via drop/paste).
+        // 3. Everything else falls through to the default `<a>`.
         (props, key, children) => {
           if (!props.href) return undefined;
+          if (isFigmaUrl(props.href)) {
+            return (
+              <FigmaEmbed key={key} src={props.href}>
+                {children}
+              </FigmaEmbed>
+            );
+          }
           if (!extractTaskImagePath(props.href)) return undefined;
           const name = reactNodeToText(children) || "Untitled";
           // Bypass image detection — the link could resolve to a .pdf/.docx

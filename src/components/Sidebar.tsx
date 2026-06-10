@@ -37,14 +37,31 @@ import { MyTasksLink } from "@/features/tasks/MyTasksLink";
 import { useCurrentWorkspaceId } from "@/features/workspaces/CurrentWorkspaceProvider";
 import { MembersDialog } from "@/features/workspaces/MembersDialog";
 import { useWorkspace, useWorkspaces } from "@/features/workspaces/useWorkspace";
+import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const { data: workspace, isLoading: workspaceLoading } = useWorkspace();
   const [membersOpen, setMembersOpen] = useState(false);
 
+  // Sidebar is user-resizable: grip lives on the right edge, drag right
+  // grows it. Persisted to localStorage so the user's choice survives
+  // reloads. Bounds match the Figma + practical density limits:
+  // narrower than 200 truncates project names too aggressively, wider
+  // than 350 wastes space without adding info.
+  const { width, isResizing, onPointerDown } = useResizablePanel({
+    storageKey: "design-tracker:sidebar-width",
+    handleSide: "right",
+    defaultWidth: 250,
+    min: 200,
+    max: 350,
+  });
+
   return (
-    <aside className="relative z-10 w-[250px] shrink-0 border-r border-[#DEDFE0] bg-white flex flex-col py-6 px-4">
+    <aside
+      style={{ width }}
+      className="relative z-10 shrink-0 border-r border-[#DEDFE0] bg-white flex flex-col py-6 px-4"
+    >
       {/* Top column: nav rows + projects. Scrolls when the projects list
           grows past the available height. */}
       <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-y-auto">
@@ -85,6 +102,25 @@ export function Sidebar() {
         <UserMenu />
       </div>
 
+      {/* Right-edge resize handle. 8px hit target straddling the sidebar's
+          border-r — the 1px indicator sits exactly on the border line,
+          so on hover/drag the line just changes color (no extra
+          thickness, no offset). Mirrors the task panel + Done section
+          handles. */}
+      <button
+        type="button"
+        aria-label="Resize sidebar"
+        onPointerDown={onPointerDown}
+        className="group absolute inset-y-0 right-0 translate-x-1/2 z-20 w-2 cursor-col-resize focus:outline-none bg-transparent flex justify-center"
+      >
+        <span
+          className={cn(
+            "block h-full w-px transition-colors",
+            isResizing ? "bg-primary/60" : "bg-transparent group-hover:bg-primary/40"
+          )}
+        />
+      </button>
+
       <MembersDialog
         workspace={workspace ?? null}
         open={membersOpen}
@@ -117,7 +153,7 @@ export function WorkspaceSwitcher({
           <span className="text-sm font-medium truncate flex-1" title={currentName}>
             {currentName}
           </span>
-          <IconChevronDown className="h-6 w-6 text-foreground/80" />
+          <IconChevronDown className="h-[18px] w-[18px] text-foreground/80" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-60">

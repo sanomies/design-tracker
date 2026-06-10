@@ -15,6 +15,7 @@ import type { Task } from "@/types/database";
 import { AssigneePickerContent } from "./AssigneePicker";
 import { DueDatePickerContent } from "./DueDatePicker";
 import { priorityMeta } from "./priority";
+import { PriorityPickerContent } from "./PriorityPicker";
 import { PublicationPickerContent } from "./PublicationPicker";
 import { getPublication } from "./publications";
 import { TypePickerContent } from "./TypePicker";
@@ -22,6 +23,7 @@ import { getTaskType } from "./taskTypes";
 import {
   effectiveColumnWidth,
   useColumnOrder,
+  useHiddenColumns,
   useColumnWidths,
   useNameWidth,
   type ColumnId,
@@ -83,6 +85,11 @@ export function TaskRow({
   const taskType = getTaskType(task.type);
   const done = task.status === "done";
   const order = useColumnOrder();
+  const hidden = useHiddenColumns();
+  // Honour the user's per-column visibility toggle from the header
+  // settings dropdown. Filtering here keeps the rendered row in lockstep
+  // with the header (same set, same order) for free.
+  const visibleOrder = order.filter((id) => !hidden.has(id));
   const widths = useColumnWidths();
   const nameWidth = useNameWidth();
 
@@ -138,8 +145,17 @@ export function TaskRow({
   const [dueOpen, setDueOpen] = useState(false);
   const [publicationOpen, setPublicationOpen] = useState(false);
   const [typeOpen, setTypeOpen] = useState(false);
+  const [priorityOpen, setPriorityOpen] = useState(false);
 
   const stopRowClick = (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation();
+  };
+
+  // Stop pointer propagation so a click on an inline picker / checkbox
+  // / inline-title input never arms the row's dnd-kit drag activator.
+  // Mirrors how the sidebar's ProjectRow stops its More button from
+  // triggering a row drag.
+  const stopRowPointer = (e: React.PointerEvent) => {
     e.stopPropagation();
   };
 
@@ -153,6 +169,7 @@ export function TaskRow({
             <PopoverTrigger asChild>
               <button
                 type="button"
+                onPointerDown={stopRowPointer}
                 onClick={stopRowClick}
                 onKeyDown={stopRowClick}
                 className="w-full flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-accent text-left transition-colors"
@@ -199,6 +216,7 @@ export function TaskRow({
             <PopoverTrigger asChild>
               <button
                 type="button"
+                onPointerDown={stopRowPointer}
                 onClick={stopRowClick}
                 onKeyDown={stopRowClick}
                 className="w-full flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-accent text-left transition-colors"
@@ -248,6 +266,7 @@ export function TaskRow({
             <PopoverTrigger asChild>
               <button
                 type="button"
+                onPointerDown={stopRowPointer}
                 onClick={stopRowClick}
                 onKeyDown={stopRowClick}
                 className="w-full flex items-center text-xs whitespace-nowrap rounded px-1 py-0.5 hover:bg-accent text-left transition-colors"
@@ -303,18 +322,48 @@ export function TaskRow({
 
       case "priority":
         return (
-          <div className="px-1">
-            {priority ? (
-              <Badge
-                variant="outline"
-                className={cn("h-[18px] px-2 rounded-full text-[10px] font-semibold uppercase", priority.className)}
+          <Popover open={priorityOpen} onOpenChange={setPriorityOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                onPointerDown={stopRowPointer}
+                onClick={stopRowClick}
+                onKeyDown={stopRowClick}
+                className="w-full flex items-center rounded px-1 py-0.5 hover:bg-accent text-left transition-colors"
+                aria-label={
+                  priority ? `Change priority (${priority.label})` : "Set priority"
+                }
+                title={priority?.label}
               >
-                {priority.label}
-              </Badge>
-            ) : (
-              <EmptyCell />
-            )}
-          </div>
+                {priority ? (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "h-[18px] px-2 rounded-full text-[10px] font-semibold uppercase",
+                      priority.className
+                    )}
+                  >
+                    {priority.label}
+                  </Badge>
+                ) : (
+                  <EmptyCell />
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="p-1 w-44"
+              onClick={stopRowClick}
+            >
+              <PriorityPickerContent
+                value={task.priority}
+                onChange={(priority) =>
+                  updateTask.mutate({ id: task.id, patch: { priority } })
+                }
+                onClose={() => setPriorityOpen(false)}
+              />
+            </PopoverContent>
+          </Popover>
         );
 
       case "type":
@@ -323,6 +372,7 @@ export function TaskRow({
             <PopoverTrigger asChild>
               <button
                 type="button"
+                onPointerDown={stopRowPointer}
                 onClick={stopRowClick}
                 onKeyDown={stopRowClick}
                 className="w-full flex items-center rounded px-1 py-0.5 hover:bg-accent text-left transition-colors"
@@ -387,6 +437,7 @@ export function TaskRow({
         checked={done || pendingDone}
         onCheckedChange={toggleDone}
         onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         aria-label={done ? "Mark incomplete" : "Mark complete"}
         className="self-center h-[18px] w-[18px]"
       />
@@ -417,7 +468,7 @@ export function TaskRow({
       {/* Metadata strip. Clean — no vertical dividers between cells (the
           row's own top-border is the only horizontal line). */}
       <div className="shrink-0 flex items-stretch">
-        {order.map((id) => (
+        {visibleOrder.map((id) => (
           <div
             key={id}
             style={{ width: effectiveColumnWidth(id, widths) }}

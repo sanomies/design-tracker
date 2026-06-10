@@ -250,6 +250,19 @@ export function IconMinimize(props: IconProps) {
   );
 }
 
+// 18 — Sliders/settings (column visibility dropdown trigger in the
+// task list header — matches Figma node 425:10457)
+export function IconColumnSettings(props: IconProps) {
+  return (
+    <Svg18 {...props}>
+      <path d="M10.5 12.75H3.75" />
+      <path d="M14.25 5.25H7.5" />
+      <path d="M12.75 15C13.9926 15 15 13.9926 15 12.75C15 11.5074 13.9926 10.5 12.75 10.5C11.5074 10.5 10.5 11.5074 10.5 12.75C10.5 13.9926 11.5074 15 12.75 15Z" />
+      <path d="M5.25 7.5C6.49264 7.5 7.5 6.49264 7.5 5.25C7.5 4.00736 6.49264 3 5.25 3C4.00736 3 3 4.00736 3 5.25C3 6.49264 4.00736 7.5 5.25 7.5Z" />
+    </Svg18>
+  );
+}
+
 // 17 — Smiley face + add (per-comment "react / add" action)
 export function IconSmilePlus(props: IconProps) {
   return (

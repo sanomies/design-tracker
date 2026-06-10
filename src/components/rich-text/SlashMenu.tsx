@@ -1,4 +1,11 @@
-import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -20,9 +27,19 @@ type Props = {
 
 export const SlashMenu = forwardRef<SlashMenuHandle, Props>(({ items, command }, ref) => {
   const [selected, setSelected] = useState(0);
+  // Refs for each rendered button so arrow-key navigation can scroll
+  // the active item into view when the menu's `max-h` clips the list.
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // Reset selection when the items list changes (typing filters the list).
   useEffect(() => setSelected(0), [items]);
+
+  // Keep the active item visible when the selection moves past the
+  // visible window. `block: "nearest"` scrolls the minimum amount —
+  // pages don't jump when the cursor walks one row at a time.
+  useEffect(() => {
+    itemRefs.current[selected]?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
 
   useImperativeHandle(ref, () => ({
     onKeyDown: (event) => {
@@ -62,6 +79,9 @@ export const SlashMenu = forwardRef<SlashMenuHandle, Props>(({ items, command },
       {items.map((item, index) => (
         <button
           key={item.id}
+          ref={(el) => {
+            itemRefs.current[index] = el;
+          }}
           type="button"
           onClick={() => command(item)}
           onMouseEnter={() => setSelected(index)}

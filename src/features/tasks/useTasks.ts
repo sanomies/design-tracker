@@ -9,7 +9,7 @@ import type { Task, TaskUpdate } from "@/types/database";
 
 const UNDO_WINDOW_MS = 6000;
 
-const tasksKey = (projectId: string | undefined) => ["tasks", projectId] as const;
+export const tasksKey = (projectId: string | undefined) => ["tasks", projectId] as const;
 
 // Reads -----------------------------------------------------------------
 
@@ -134,11 +134,17 @@ export function useUpdateTask(projectId: string | undefined) {
       return data;
     },
     onMutate: async ({ id, patch }) => {
-      await qc.cancelQueries({ queryKey: tasksKey(projectId) });
+      // Do the optimistic write BEFORE the `await cancelQueries` so it
+      // runs in the synchronous slice of this function — i.e. inside
+      // the same React batch as the caller's setState. Without this,
+      // a drag-drop reorder shows the row briefly at its old slot
+      // (DragOverlay gone, cache not yet updated) before snapping into
+      // place.
       const previous = qc.getQueryData<Task[]>(tasksKey(projectId));
       qc.setQueryData<Task[]>(tasksKey(projectId), (old = []) =>
         old.map((t) => (t.id === id ? { ...t, ...patch } : t))
       );
+      await qc.cancelQueries({ queryKey: tasksKey(projectId) });
       return { previous };
     },
     onError: (_err, _vars, context) => {

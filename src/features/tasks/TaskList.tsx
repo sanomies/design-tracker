@@ -17,8 +17,10 @@ import {
   PointerSensor,
   KeyboardSensor,
   closestCenter,
+  closestCorners,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -27,6 +29,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { GripVertical } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -42,7 +45,6 @@ import {
 } from "@/features/sections/SectionDialogs";
 import { SectionBlock } from "@/features/sections/SectionBlock";
 import { SortableSection, sectionRowId } from "@/features/sections/SortableSection";
-import { GripVertical } from "lucide-react";
 
 import { TaskListHeader } from "./TaskListHeader";
 import { defaultFilters, matchesFilters, type Filters } from "./taskFilters";
@@ -225,6 +227,7 @@ export function TaskList({
       // ignore
     }
   }, [collapsedSet, collapseKey]);
+
   // Done-section collapse state, persisted per project.
   const doneCollapsedKey = `${DONE_COLLAPSED_STORAGE_PREFIX}${projectId}`;
   const [doneCollapsed, setDoneCollapsed] = useState<boolean>(() => {
@@ -409,9 +412,10 @@ export function TaskList({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // Track what's being dragged so the DragOverlay can render the matching
-  // preview. We also force a global grabbing cursor while a drag is in
-  // flight — much more obvious feedback than relying on the source row.
+  // Active id while dragging — backs the DragOverlay's lifted preview.
+  // The "row follows the cursor" pattern (no overlay) jittered inside
+  // nested layouts here, so the source row stays in place as a dimmed
+  // slot and the overlay carries the visible motion.
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeType = activeId?.startsWith("section-row:") ? "section" : "task";
   const activeTask =
@@ -437,6 +441,34 @@ export function TaskList({
   };
 
   const finishDrag = () => setActiveId(null);
+
+  // Collision detection per active type.
+  //
+  // - Tasks use closestCorners (corner-to-corner) — stable for similar-
+  //   sized rows, picks the right neighbour at row boundaries.
+  // - Sections use closestCenter, but with the candidate droppables
+  //   filtered down to ONLY the section-row sortables. Otherwise the
+  //   default candidate set is "every droppable in the DndContext",
+  //   which here includes every task sortable plus each section's
+  //   container droppable ("section:<id>"). Those non-section-row
+  //   droppables sit inside the section's bounding box, so closestCenter
+  //   often picks one of THEM as `over` instead of a sibling section
+  //   row — and when over.id isn't in the section-row SortableContext's
+  //   items array, the strategy can't shift the other sections to make
+  //   room. Filtering keeps the comparison between siblings only.
+  const collisionDetection: CollisionDetection = (args) => {
+    const activeType = args.active.data.current?.type;
+    if (activeType === "section") {
+      return closestCenter({
+        ...args,
+        droppableContainers: args.droppableContainers.filter((d) => {
+          const id = typeof d.id === "string" ? d.id : String(d.id);
+          return id.startsWith("section-row:");
+        }),
+      });
+    }
+    return closestCorners(args);
+  };
 
   // Resolve the target section + new position for a drop event, then mutate.
   const onDragEnd = (event: DragEndEvent) => {
@@ -630,7 +662,8 @@ export function TaskList({
         <>
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            // Per-active strategy — see `collisionDetection` above.
+            collisionDetection={collisionDetection}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             onDragCancel={finishDrag}
@@ -649,7 +682,8 @@ export function TaskList({
                   onSortChange={setSort}
                 />
               </div>
-              {/* Un-sectioned tasks first */}
+              {/* Un-sectioned tasks first — their own SectionBlock
+                  carries the inner task SortableContext. */}
               {unsectioned.length > 0 && (
                 <SectionBlock
                   section={null}
@@ -663,10 +697,12 @@ export function TaskList({
                 />
               )}
 
-              {/* User-defined sections — wrapped in their own
-                  SortableContext so each section row is independently
-                  draggable. Tasks live in nested SortableContexts inside
-                  each SectionBlock. */}
+              {/* Section reorder lives in its OWN SortableContext that
+                  only knows about section row IDs — separate from each
+                  section's internal task context. Unifying them caused
+                  compounding transforms (each task's transform stacked
+                  on top of its section's transform), which read as
+                  jitter / jump-back during drag. */}
               <SortableContext
                 items={sortedSections.map((s) => sectionRowId(s.id))}
                 strategy={verticalListSortingStrategy}
@@ -691,11 +727,17 @@ export function TaskList({
               </SortableContext>
             </div>
 
-            {/* Lifted "ghost" that follows the cursor. Source row keeps a
-                placeholder slot so the user sees where it'll land. */}
+            {/* Lifted "ghost" that follows the cursor. The source row /
+                section keeps its slot (dimmed + dashed) so the user
+                sees exactly where the item will land if they cancel. */}
             <DragOverlay>
               {activeTask ? (
-                <div className="rounded-md bg-background ring-1 ring-foreground/10 shadow-2xl rotate-1 cursor-grabbing">
+                // `[&_*]:!cursor-grabbing` forces every descendant of
+                // the overlay clone to inherit the grabbing cursor —
+                // otherwise TaskRow's inner `cursor-pointer` (used to
+                // signal "row is clickable" in the list) wins and the
+                // preview shows the wrong cursor mid-drag.
+                <div className="rounded-md bg-background ring-1 ring-foreground/10 shadow-2xl cursor-grabbing [&_*]:!cursor-grabbing">
                   <TaskRow
                     task={activeTask}
                     workspaceId={workspaceId}
@@ -706,7 +748,7 @@ export function TaskList({
                   />
                 </div>
               ) : activeSection ? (
-                <div className="rounded-md bg-background ring-1 ring-foreground/10 shadow-2xl px-3 py-1.5 flex items-center gap-1 rotate-1 cursor-grabbing">
+                <div className="rounded-md bg-background ring-1 ring-foreground/10 shadow-2xl px-3 py-1.5 flex items-center gap-1 cursor-grabbing [&_*]:!cursor-grabbing">
                   <GripVertical
                     className="h-3.5 w-3.5 text-muted-foreground"
                     aria-hidden
@@ -727,21 +769,30 @@ export function TaskList({
               // — no card / rounded corners / margins. Header chevron is
               // intentionally 24×24, larger than the 18×18 chevrons on
               // the inline To Do / In Progress section headers.
-              className="shrink-0 flex flex-col bg-[#F6F9F9] border-t border-[#DEDFE0]"
+              //
+              // `relative` so the resize handle below can be absolute-
+              // positioned to straddle the section's top border exactly
+              // (mirrors the right-panel resize pattern in ProjectView).
+              className="relative shrink-0 flex flex-col bg-[#F6F9F9] border-t border-[#DEDFE0]"
               // When collapsed, let the wrapper auto-fit the header height;
               // when expanded, use the user-resizable height.
               style={doneCollapsed ? undefined : { height: doneHeight }}
             >
               {!doneCollapsed && (
+                // 8px hit target straddling the section's top edge — 4px
+                // above the border, 4px below. The 1px indicator sits
+                // exactly on the border line, so on hover/drag the line
+                // just changes color (no extra thickness, no offset).
+                // Matches the right-panel handle in ProjectView.
                 <button
                   type="button"
                   aria-label="Resize Done section"
                   onPointerDown={onDoneResize}
-                  className="group h-1.5 w-full cursor-row-resize shrink-0 focus:outline-none bg-transparent"
+                  className="group absolute inset-x-0 top-0 -translate-y-1/2 z-10 h-2 cursor-row-resize focus:outline-none bg-transparent flex items-center"
                 >
                   <span
                     className={cn(
-                      "block w-full h-0.5 transition-colors",
+                      "block w-full h-px transition-colors",
                       doneResizing
                         ? "bg-primary/60"
                         : "bg-transparent group-hover:bg-primary/40"

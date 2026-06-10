@@ -3,6 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import osanoLogo from "@/assets/brand/osano-logo.svg";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -84,7 +85,12 @@ export function AuthShell({
   return (
     <div className="min-h-dvh flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <img
+            src={osanoLogo}
+            alt="oSano"
+            className="h-[30px] w-auto mb-6 shrink-0"
+          />
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
         </div>

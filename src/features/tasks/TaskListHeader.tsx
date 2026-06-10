@@ -1,8 +1,8 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown, ArrowUp, Check } from "lucide-react";
 
-import { IconChevronDown } from "@/components/icons/figma";
+import { IconChevronDown, IconColumnSettings } from "@/components/icons/figma";
 import {
   DndContext,
   PointerSensor,
@@ -21,6 +21,14 @@ import { CSS } from "@dnd-kit/utilities";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { avatarColor } from "@/lib/avatarColor";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
 import { cn } from "@/lib/utils";
@@ -35,11 +43,13 @@ import {
   NAME_MIN_WIDTH,
   effectiveColumnWidth,
   setColumnOrder,
+  setColumnVisible,
   setColumnWidth,
   setNameWidth,
   toggleSort,
   useColumnOrder,
   useColumnWidths,
+  useHiddenColumns,
   useNameWidth,
   type ColumnId,
   type SortState,
@@ -63,6 +73,14 @@ export function TaskListHeader({
 }: Props) {
   const { data: members = [] } = useWorkspaceMembers(workspaceId);
   const order = useColumnOrder();
+  const hidden = useHiddenColumns();
+  // Only the columns the user has chosen to show — preserves the user's
+  // drag-reorder among the visible ones. The full `order` still drives
+  // the settings dropdown so hidden columns can be re-enabled.
+  const visibleOrder = useMemo(
+    () => order.filter((id) => !hidden.has(id)),
+    [order, hidden]
+  );
 
   // 8px activation distance so a quick click on the header still opens the
   // filter popover; only a deliberate horizontal drag starts a reorder.
@@ -113,9 +131,12 @@ export function TaskListHeader({
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
-        <SortableContext items={order} strategy={horizontalListSortingStrategy}>
+        <SortableContext
+          items={visibleOrder}
+          strategy={horizontalListSortingStrategy}
+        >
           <div className="shrink-0 flex items-stretch -my-2">
-            {order.map((id) => (
+            {visibleOrder.map((id) => (
               <SortableColumn key={id} id={id}>
                 {renderHeaderCell(id, filters, onChange, members, sort, onSortChange)}
               </SortableColumn>
@@ -123,6 +144,46 @@ export function TaskListHeader({
           </div>
         </SortableContext>
       </DndContext>
+
+      {/* Settings dropdown — controls per-column visibility. Lives at
+          the right edge of the header strip, outside the sortable
+          context so its click never starts a column reorder. The full
+          `order` (visible + hidden) is iterated so previously-hidden
+          columns can be toggled back on. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Column settings"
+            title="Show/hide columns"
+            // ml-auto pushes the trigger to the far right of the header
+            // strip — the SortableContext columns stay left-anchored next
+            // to the Name column and the settings icon hugs the right
+            // edge regardless of how many columns are visible.
+            className="ml-auto self-center h-[18px] w-[18px] inline-flex items-center justify-center text-[#708597] hover:text-foreground rounded transition-colors"
+          >
+            <IconColumnSettings className="h-[18px] w-[18px]" aria-hidden />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuLabel className="text-xs font-semibold text-[#708597] normal-case">
+            Show columns
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {order.map((id) => (
+            <DropdownMenuCheckboxItem
+              key={id}
+              checked={!hidden.has(id)}
+              onCheckedChange={(checked) => setColumnVisible(id, !!checked)}
+              // Prevent the menu from closing on each toggle so the
+              // user can flip several columns in one open.
+              onSelect={(e) => e.preventDefault()}
+            >
+              {COLUMN_LABELS[id]}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

@@ -6,11 +6,13 @@ import StarterKit from "@tiptap/starter-kit";
 import Mention from "@tiptap/extension-mention";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
+import { Plugin } from "@tiptap/pm/state";
 import Table from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
-import Image from "@tiptap/extension-image";
+// Image is brought in via our extended EditorImage below (adds the
+// hover download/delete overlay as a React NodeView).
 import type { SuggestionOptions } from "@tiptap/suggestion";
 import tippy, { type Instance as TippyInstance } from "tippy.js";
 import EmojiPicker, { EmojiStyle, Theme as EmojiTheme } from "emoji-picker-react";
@@ -65,6 +67,7 @@ import { MentionList, type MentionListHandle, type MentionItem } from "./Mention
 import { SlashCommand, type SlashCommandPayload } from "./SlashCommandExtension";
 import { SlashMenu, type SlashItem, type SlashMenuHandle } from "./SlashMenu";
 import { BannerNode } from "./BannerNode";
+import { EditorImage } from "./EditorImage";
 import { BannerPicker, type AnchorTarget as BannerAnchor } from "./BannerPicker";
 import { InlineFileNode } from "./InlineFileNode";
 import { CopyDimensionsOverlay } from "./CopyDimensionsOverlay";
@@ -92,6 +95,11 @@ type Props = {
   /** When provided, non-image files pasted or dropped into the editor are
    *  uploaded via this callback and inserted as clickable links inline. */
   onUploadFile?: (file: File) => Promise<string>;
+  /** Fires on Cmd+Enter (Ctrl+Enter on non-Mac). Used by composers like
+   *  the comment box to submit without reaching for the mouse. The editor
+   *  passes the current HTML to the handler; if it returns false (or
+   *  isn't provided) the keystroke falls through to TipTap's defaults. */
+  onSubmit?: (html: string) => void;
 };
 
 const EMPTY_HTML = ["", "<p></p>", "<p><br></p>"];
@@ -261,8 +269,13 @@ function buildSlashSuggestion({
       label: "Emoji",
       keywords: ["smiley", "face", "icon"],
       icon: <Smile className="h-3.5 w-3.5" />,
+      // NB: deleteRange WITHOUT .focus() so the picker that opens next
+      // can take focus on its own. Calling editor.chain().focus()
+      // before onOpenEmoji() raced the EmojiDialog's auto-focused
+      // search input and the editor won, making the picker feel
+      // unresponsive.
       run: ({ editor, range }) => {
-        editor.chain().focus().deleteRange(range).run();
+        editor.chain().deleteRange(range).run();
         onOpenEmoji();
       },
     },
@@ -272,7 +285,7 @@ function buildSlashSuggestion({
       keywords: ["picture", "photo", "img"],
       icon: <ImageIcon className="h-3.5 w-3.5" />,
       run: ({ editor, range }) => {
-        editor.chain().focus().deleteRange(range).run();
+        editor.chain().deleteRange(range).run();
         onOpenImage();
       },
     },
@@ -291,7 +304,7 @@ function buildSlashSuggestion({
       keywords: ["link", "url", "iframe"],
       icon: <ExternalLink className="h-3.5 w-3.5" />,
       run: ({ editor, range }) => {
-        editor.chain().focus().deleteRange(range).run();
+        editor.chain().deleteRange(range).run();
         onOpenEmbed();
       },
     },
@@ -310,7 +323,7 @@ function buildSlashSuggestion({
       keywords: ["banner", "ad", "creative", "size", "dimension"],
       icon: <LayoutGrid className="h-3.5 w-3.5" />,
       run: ({ editor, range }) => {
-        editor.chain().focus().deleteRange(range).run();
+        editor.chain().deleteRange(range).run();
         onOpenBanners(filter);
       },
     };
@@ -386,6 +399,7 @@ export function RichTextEditor({
   minHeight = "80px",
   onUploadImage,
   onUploadFile,
+  onSubmit,
 }: Props) {
   // Toolbar visibility = editor focused OR any sub-UI open. Tracking each
   // popover/dropdown lets the toolbar stay visible while the user interacts
@@ -426,11 +440,20 @@ export function RichTextEditor({
   openBannerPickerRef.current = (initialFilter) => {
     const el = wrapperRef.current;
     if (!el) return;
-    setBannerPicker({
-      open: true,
-      anchor: { type: "element", element: el },
-      initialFilter,
-    });
+    // Defer by one task so the click that triggered the open (typically
+    // a SlashMenu item click — the Tippy popup tears down inline as
+    // part of that same click) finishes propagating before Radix's
+    // outside-click detector activates on the new popover. Without
+    // this, the popover mounts mid-click, sees the still-bubbling
+    // event as "outside the popover", and immediately closes itself —
+    // which reads as a flicker on the user side.
+    setTimeout(() => {
+      setBannerPicker({
+        open: true,
+        anchor: { type: "element", element: el },
+        initialFilter,
+      });
+    }, 0);
   };
 
   // See buildMentionSuggestion — editor closures freeze at mount, so we
@@ -451,6 +474,13 @@ export function RichTextEditor({
   useEffect(() => {
     fileUploadRef.current = onUploadFile;
   }, [onUploadFile]);
+
+  // Same ref pattern for onSubmit so the editorProps.handleKeyDown
+  // closure (captured at mount) always sees the latest handler.
+  const onSubmitRef = useRef(onSubmit);
+  useEffect(() => {
+    onSubmitRef.current = onSubmit;
+  }, [onSubmit]);
 
   // Editor is created below; we keep a ref so the file picker change handler
   // (declared outside the useEditor call) can reach it.
@@ -561,12 +591,79 @@ export function RichTextEditor({
         heading: { levels: [1, 2] },
       }),
       Underline,
-      Link.configure({
-        openOnClick: false,
+      Link.extend({
+        // Keep a link mark's `href` in sync with the URL displayed
+        // underneath it. TipTap's autolink only fires on initial
+        // typing — editing already-linked text leaves the original
+        // href pointing at the original URL, so "osta.ee" edited to
+        // "okidoki.ee" still navigated to osta.ee. This plugin
+        // re-checks each link mark after every transaction: if the
+        // text under it parses as a URL and differs from the current
+        // href, the href is rewritten. Non-URL text inside a link
+        // mark (a deliberate custom-text link) is left alone — its
+        // text doesn't match the URL pattern, so the plugin skips it.
+        addProseMirrorPlugins() {
+          const parent = this.parent?.() ?? [];
+          return [
+            ...parent,
+            new Plugin({
+              appendTransaction(_txs, oldState, newState) {
+                if (newState.doc.eq(oldState.doc)) return null;
+                const linkType = newState.schema.marks.link;
+                if (!linkType) return null;
+
+                const tr = newState.tr;
+                let changed = false;
+
+                newState.doc.descendants((node, pos) => {
+                  if (!node.isText) return;
+                  const linkMark = node.marks.find((m) => m.type === linkType);
+                  if (!linkMark) return;
+
+                  const text = node.text ?? "";
+                  // URL with explicit protocol OR a bare domain like
+                  // "osta.ee" / "sub.domain.co/path". Refuses spaces.
+                  const looksLikeUrl =
+                    /^https?:\/\/\S+$/.test(text) ||
+                    /^[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+(?:\/\S*)?$/.test(text);
+                  if (!looksLikeUrl) return;
+
+                  const desiredHref = /^https?:\/\//.test(text)
+                    ? text
+                    : `https://${text}`;
+                  if (desiredHref === linkMark.attrs.href) return;
+
+                  // removeMark + addMark on the same range don't
+                  // shift node positions, so we can reuse `pos` for
+                  // multiple stale links in a single transaction.
+                  const newMark = linkType.create({
+                    ...linkMark.attrs,
+                    href: desiredHref,
+                  });
+                  tr.removeMark(pos, pos + node.nodeSize, linkType);
+                  tr.addMark(pos, pos + node.nodeSize, newMark);
+                  changed = true;
+                });
+
+                return changed ? tr : null;
+              },
+            }),
+          ];
+        },
+      }).configure({
+        // Clicks on links open them in a new tab (target=_blank via the
+        // HTMLAttributes below). Cursor placement at the link's edges
+        // still works for editing, but clicking ON the link text itself
+        // navigates — matches user expectation for both the description
+        // editor and the comment composer.
+        openOnClick: true,
         autolink: true,
         HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
       }),
-      Image.configure({
+      // EditorImage extends TipTap's Image with a React NodeView that
+      // adds a hover-revealed Download (+ Delete) overlay — same
+      // affordance the read-only InlineImage renderer offers.
+      EditorImage.configure({
         HTMLAttributes: { class: "tiptap-image" },
       }),
       Table.configure({ resizable: false }),
@@ -606,6 +703,21 @@ export function RichTextEditor({
         class: "tiptap-content focus:outline-none",
         "data-placeholder": placeholder ?? "",
         style: `min-height: ${minHeight}`,
+      },
+      handleKeyDown: (_view, event) => {
+        // Cmd+Enter (Mac) / Ctrl+Enter (Win/Linux) submits via the
+        // host's onSubmit handler — used by the comment composer to
+        // post without clicking the Post button. We only consume the
+        // keystroke when an onSubmit is wired; otherwise it falls
+        // through to TipTap's default Enter handling.
+        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+          const handler = onSubmitRef.current;
+          if (!handler) return false;
+          event.preventDefault();
+          handler(editorRef.current?.getHTML() ?? "");
+          return true;
+        }
+        return false;
       },
       handlePaste: (_view, event) => {
         const hasUploader = !!uploadRef.current;
@@ -1131,12 +1243,25 @@ function InsertMenu({
           size="icon"
           aria-label="Insert"
           className="h-7 w-7"
-          onMouseDown={(e) => e.preventDefault()}
         >
           <Plus className="h-3.5 w-3.5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="top" className="w-56">
+      <DropdownMenuContent
+        align="start"
+        side="top"
+        className="w-56"
+        // Suppress Radix's default "focus the trigger button on close"
+        // behavior. We don't actively grab focus here either: every
+        // inline action item below already runs `editor.chain().focus().X()`
+        // (so the editor stays focused for those), and the picker items
+        // (Image / Emoji / Embed / Banners) let the picker that opens
+        // take focus on its own. An explicit `editor.commands.focus()`
+        // call here would race the BannerPicker's auto-focused search
+        // input and steal focus from it — that's why Banners "didn't
+        // work" after the +menu change.
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         <MenuRow
           icon={<Pilcrow className="h-3.5 w-3.5" />}
           label="Paragraph"
@@ -1210,12 +1335,12 @@ function InsertMenu({
         <MenuRow
           icon={<LayoutGrid className="h-3.5 w-3.5" />}
           label="Banners"
-          onSelect={() => {
-            // Restore the editor's last selection so the banner insert lands
-            // where the user was typing before they reached for the toolbar.
-            editor.commands.focus();
-            onOpenBanners();
-          }}
+          // BannerPicker auto-focuses its search input on open. We
+          // intentionally do NOT call editor.commands.focus() here —
+          // that would compete with the picker for focus and (combined
+          // with the dropdown's onCloseAutoFocus) hand focus back to
+          // the editor before the picker mounts.
+          onSelect={onOpenBanners}
         />
       </DropdownMenuContent>
     </DropdownMenu>

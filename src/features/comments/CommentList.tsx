@@ -534,6 +534,12 @@ export function CommentComposer({
           className="rounded-lg border-[#DEDFE0] shadow-[inset_0_2px_4px_0_rgba(0,0,0,0.1)]"
           onUploadImage={(file) => uploadEditorImage(file, taskId)}
           onUploadFile={(file) => uploadEditorFile(file, taskId)}
+          // Cmd/Ctrl+Enter submits without reaching for the Post button.
+          // post() reads `valueRef` so we don't need the html arg here.
+          onSubmit={() => {
+            if (disabled) return;
+            void post();
+          }}
         />
         {!empty && (
           <div className="flex items-center justify-end">

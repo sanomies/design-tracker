@@ -5,11 +5,23 @@
 // ("#FF99CC"). Both shapes are supported by the helpers below for
 // backwards compat — existing rows don't need a migration.
 
-export type ProjectColor = "pink" | "red" | "orange" | "yellow" | "green" | "teal";
+export type ProjectColor =
+  | "pink"
+  | "red"
+  | "orange"
+  | "yellow"
+  | "green"
+  | "teal"
+  | "cyan"
+  | "blue"
+  | "indigo"
+  | "purple"
+  | "slate";
 
-// Quick-pick swatches shown above the freeform colour picker. Hex
-// values picked to match the Tailwind classes we used previously so
-// pre-existing rows render identically.
+// Quick-pick swatches shown above the freeform colour picker. The
+// original six are preserved (existing rows reference them by name);
+// the rest are added for broader coverage. Hex values picked to feel
+// in-family with the originals — punchy / saturated.
 export const PROJECT_COLORS: {
   value: ProjectColor;
   label: string;
@@ -21,6 +33,11 @@ export const PROJECT_COLORS: {
   { value: "yellow", label: "Yellow", hex: "#FACC15" },
   { value: "green",  label: "Green",  hex: "#10B981" },
   { value: "teal",   label: "Teal",   hex: "#14B8A6" },
+  { value: "cyan",   label: "Cyan",   hex: "#06B6D4" },
+  { value: "blue",   label: "Blue",   hex: "#3B82F6" },
+  { value: "indigo", label: "Indigo", hex: "#6366F1" },
+  { value: "purple", label: "Purple", hex: "#A855F7" },
+  { value: "slate",  label: "Slate",  hex: "#64748B" },
 ];
 
 export const DEFAULT_PROJECT_COLOR_HEX = "#14B8A6"; // teal

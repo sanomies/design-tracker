@@ -1,4 +1,10 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { avatarColor } from "@/lib/avatarColor";
@@ -26,9 +32,16 @@ function initials(name: string): string {
 
 export const MentionList = forwardRef<MentionListHandle, Props>(({ items, command }, ref) => {
   const [selected, setSelected] = useState(0);
+  // Per-item refs so arrow-key navigation can scroll the active row
+  // into view when the menu's `max-h` clips a long member list.
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // Reset selection when the items list changes (typing filters the list).
   useEffect(() => setSelected(0), [items]);
+
+  useEffect(() => {
+    itemRefs.current[selected]?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
 
   useImperativeHandle(ref, () => ({
     onKeyDown: (event) => {
@@ -63,6 +76,9 @@ export const MentionList = forwardRef<MentionListHandle, Props>(({ items, comman
       {items.map((item, index) => (
         <button
           key={item.id}
+          ref={(el) => {
+            itemRefs.current[index] = el;
+          }}
           type="button"
           onClick={() => command(item)}
           onMouseEnter={() => setSelected(index)}
