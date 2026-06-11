@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- maximum-scale=1 stops iOS Safari from auto-zooming when you focus an
+         input/editable field whose font-size is under 16px (our editor is
+         14px). Modern Safari still allows accessibility pinch-zoom. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
     <title>Design Tracker</title>
     <!-- Inline data-URL favicon so the browser stops 404'ing on
          /favicon.ico. Replace with a real .ico/.svg whenever the project
