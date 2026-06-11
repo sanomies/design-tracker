@@ -45,6 +45,7 @@ import {
 } from "@/components/rich-text/uploadEditorImage";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import type { Comment, CommentReaction, Profile } from "@/types/database";
 
 import { ReactionPicker } from "./ReactionPicker";
@@ -202,6 +203,12 @@ function CommentRow({
   onDelete: (commentId: string) => Promise<void>;
 }) {
   const isAuthor = !!selfId && comment.author_id === selfId;
+  // Touch devices have no hover, so the per-comment action icons (react /
+  // more) must stay visible there; on desktop they reveal on hover.
+  const isMobile = useIsMobile();
+  const actionVisibility = isMobile
+    ? "opacity-100"
+    : "opacity-0 group-hover/comment:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity";
   const imageUrls = useMemo(() => extractImageUrls(comment.body), [comment.body]);
   const fileUrls = useMemo(() => extractFileUrls(comment.body), [comment.body]);
   const allUrls = useMemo(
@@ -332,7 +339,10 @@ function CommentRow({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 text-[#708597] hover:text-foreground opacity-0 group-hover/comment:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+                    className={cn(
+                      "h-6 w-6 text-[#708597] hover:text-foreground",
+                      actionVisibility
+                    )}
                     aria-label="Comment actions"
                   >
                     <IconMoreHorizontal className="h-[18px] w-[18px]" />
