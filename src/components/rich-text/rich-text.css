@@ -4,6 +4,17 @@
   @apply text-sm leading-relaxed break-words;
 }
 
+/* iOS Safari auto-zooms when you focus an editable field whose font-size is
+   under 16px. The editor (.tiptap-content.ProseMirror — the contenteditable;
+   read-only content has .tiptap-content only) is 14px, so tapping the
+   description/comment zoomed the page. Bump just the editor to 16px on
+   mobile to suppress the zoom; read-only display stays 14px. */
+@media (max-width: 767px) {
+  .tiptap-content.ProseMirror {
+    font-size: 16px;
+  }
+}
+
 .tiptap-content p {
   @apply my-1;
 }
