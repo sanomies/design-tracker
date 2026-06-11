@@ -2,12 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Design Tracker</title>
     <!-- Inline data-URL favicon so the browser stops 404'ing on
          /favicon.ico. Replace with a real .ico/.svg whenever the project
          picks a brand mark. -->
     <link rel="icon" href="data:," />
+
+    <!-- PWA / iOS home-screen app. Without a manifest declaring `scope`, iOS
+         can't tell which URLs belong to the app and shows a top-left "✕"
+         close affordance on most pages of a home-screen web app. The
+         manifest scope (all of BASE_URL) keeps SPA navigation in-scope, and
+         display:standalone + the apple meta tags make it a chromeless app.
+         (Re-add the icon to the home screen after deploy for iOS to pick
+         these up — iOS caches the web-clip settings at add time.) -->
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Design Tracker" />
+    <link rel="apple-touch-icon" href="%BASE_URL%icons/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
