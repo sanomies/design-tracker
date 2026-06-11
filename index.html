@@ -7,10 +7,13 @@
          14px). Modern Safari still allows accessibility pinch-zoom. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
     <title>Design Tracker</title>
-    <!-- Inline data-URL favicon so the browser stops 404'ing on
-         /favicon.ico. Replace with a real .ico/.svg whenever the project
-         picks a brand mark. -->
-    <link rel="icon" href="data:," />
+    <!-- Favicon generated from src/assets/brand/favicon.png. favicon.ico
+         (16/32/48) covers legacy browsers + the default /favicon.ico request;
+         the PNG links cover modern browsers. All served under %BASE_URL% for
+         the GitHub Pages base path. -->
+    <link rel="icon" href="%BASE_URL%favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%icons/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="%BASE_URL%icons/favicon-16x16.png" />
 
     <!-- PWA / iOS home-screen app. Without a manifest declaring `scope`, iOS
          can't tell which URLs belong to the app and shows a top-left "✕"
