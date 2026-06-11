@@ -4,6 +4,8 @@ import type { Editor } from "@tiptap/react";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { toast } from "sonner";
 
+import { useIsMobile } from "@/hooks/useIsMobile";
+
 import { formatBannerLabel, getBanner } from "./bannerCatalog";
 
 /** Single "Copy" button anchored to the top-right of the editor, visible
@@ -16,6 +18,7 @@ import { formatBannerLabel, getBanner } from "./bannerCatalog";
  *  races — earlier the portal'd button visually overlapped the pills, which
  *  caused the button to flicker as the cursor crossed in and out of it. */
 export function CopyDimensionsOverlay({ editor }: { editor: Editor }) {
+  const isMobile = useIsMobile();
   const [bannerCount, setBannerCount] = useState(0);
 
   useEffect(() => {
@@ -47,7 +50,8 @@ export function CopyDimensionsOverlay({ editor }: { editor: Editor }) {
     }
   }, [editor]);
 
-  if (bannerCount === 0) return null;
+  // Not shown on mobile — the button isn't needed there.
+  if (isMobile || bannerCount === 0) return null;
 
   return (
     <button
