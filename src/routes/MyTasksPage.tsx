@@ -690,6 +690,11 @@ function MyTasksDesktop() {
               onDragCancel={finishDrag}
             >
               <div className="flex-1 min-h-0 overflow-y-auto">
+                {/* Shared-width wrapper (matches ProjectView/TaskList): rows +
+                    header share one content width (= widest row, never
+                    narrower than the viewport) so the row separators span the
+                    full horizontal scroll instead of breaking at the edge. */}
+                <div className="w-max min-w-full">
                 {/* Header lives INSIDE the scroll container so header and
                     rows share the same width — when the scrollbar takes
                     width, both shrink together and column dividers stay
@@ -742,6 +747,7 @@ function MyTasksDesktop() {
                     </SortableSection>
                   ))}
                 </SortableContext>
+                </div>
               </div>
 
               <DragOverlay>
@@ -856,6 +862,9 @@ function MyTasksDesktop() {
                 </div>
                 {!doneCollapsed && (
                   <ul className="flex-1 min-h-0 overflow-y-auto divide-y-0">
+                    {/* Shared-width wrapper so Done row separators span the
+                        full horizontal scroll (matches the main list). */}
+                    <div className="w-max min-w-full">
                     {sortedDoneTasks.map((task) => (
                       <li key={task.id}>
                         <TaskRow
@@ -870,6 +879,7 @@ function MyTasksDesktop() {
                         />
                       </li>
                     ))}
+                    </div>
                   </ul>
                 )}
               </div>
@@ -905,7 +915,10 @@ function MyTasksDesktop() {
         aria-hidden={!panelOpen || panelFullscreen}
         style={{ width: panelOpen && !panelFullscreen ? panelWidth : 0 }}
         className={cn(
-          "relative shrink-0 overflow-hidden border-l bg-background",
+          // z-30 puts the panel + its left-edge shadow above the sticky
+          // column header (z-20), so the shadow covers it — matching
+          // ProjectView.
+          "relative z-30 shrink-0 overflow-hidden border-l bg-background",
           !isResizing && "transition-[width] duration-200 ease-out",
           panelOpen && !panelFullscreen && "shadow-[-12px_0_28px_-16px_rgba(0,0,0,0.18)]"
         )}

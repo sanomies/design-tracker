@@ -85,9 +85,7 @@
 
 .tiptap-content a:not(.inline-file-card) {
   /* Plain text link — Tailwind blue-600 (#2563eb), the standard
-     "modern link" color. Underline only on hover. The trailing
-     external-link icon below uses background-color: currentColor,
-     so it tints the same blue automatically. */
+     "modern link" color. Underline only on hover. */
   @apply text-[#2563eb] no-underline hover:underline underline-offset-2 cursor-pointer;
 }
 
@@ -101,21 +99,6 @@
   text-decoration: none;
 }
 
-/* Trailing "external link" glyph after any rendered anchor — quick visual
-   cue that the URL opens elsewhere. Inline file cards opt out (they have
-   their own chip layout). Uses a CSS mask so the icon picks up the link's
-   currentColor and stays crisp at any text size. */
-.tiptap-content a:not(.inline-file-card)::after {
-  content: "";
-  display: inline-block;
-  width: 0.85em;
-  height: 0.85em;
-  margin-left: 0.2em;
-  vertical-align: -0.08em;
-  background-color: currentColor;
-  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M7 17 17 7'/><path d='M8 7h9v9'/></svg>") no-repeat center / contain;
-          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M7 17 17 7'/><path d='M8 7h9v9'/></svg>") no-repeat center / contain;
-}
 
 .tiptap-content img,
 .tiptap-content .tiptap-image {
