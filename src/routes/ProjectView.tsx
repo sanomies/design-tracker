@@ -6,6 +6,7 @@ import { ProjectLetterPill } from "@/features/projects/ProjectRow";
 import { useProjects } from "@/features/projects/useProjects";
 import { MobileTaskList } from "@/features/tasks/MobileTaskList";
 import { TaskDetailPanel } from "@/features/tasks/TaskDetailPanel";
+import { MobileTaskOverlay } from "@/features/tasks/MobileTaskOverlay";
 import { TaskList } from "@/features/tasks/TaskList";
 import { TaskSearchCombobox } from "@/features/tasks/TaskSearchCombobox";
 import { recordTaskOpened } from "@/features/tasks/useRecentTasks";
@@ -221,24 +222,26 @@ export default function ProjectView() {
           The mobile overlay stops just above the 56px bottom tab bar
           (+ safe area) so the nav stays visible and the user can switch
           to Inbox / My Tasks / Search without first closing the task. */}
-      {selectedTask && showAsFullscreen && (
-        <div
-          className={cn(
-            "fixed inset-x-0 top-0 z-50 bg-background",
-            isMobile
-              ? "bottom-[calc(3.5rem+env(safe-area-inset-bottom))] overflow-hidden animate-in slide-in-from-right duration-300 ease-out"
-              : "bottom-0"
-          )}
-        >
+      {/* Mobile: slides in from the right on open, back out on close. */}
+      {isMobile && (
+        <MobileTaskOverlay
+          task={selectedTask}
+          workspaceId={workspace?.id}
+          onClose={closePanel}
+        />
+      )}
+
+      {/* Desktop fullscreen (the expand toggle) — instant, with the
+          minimize control. */}
+      {!isMobile && selectedTask && showAsFullscreen && (
+        <div className="fixed inset-x-0 top-0 bottom-0 z-50 bg-background">
           <TaskDetailPanel
             key={`${selectedTask.id}-fs`}
             task={selectedTask}
             workspaceId={workspace?.id}
             onClose={closePanel}
             isFullscreen
-            onToggleFullscreen={
-              isMobile ? undefined : () => setPanelFullscreen(false)
-            }
+            onToggleFullscreen={() => setPanelFullscreen(false)}
           />
         </div>
       )}

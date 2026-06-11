@@ -32,6 +32,7 @@ import {
 } from "@/features/notifications/useNotifications";
 import { useProject } from "@/features/projects/useProjects";
 import { TaskDetailPanel } from "@/features/tasks/TaskDetailPanel";
+import { MobileTaskOverlay } from "@/features/tasks/MobileTaskOverlay";
 import { useTasks } from "@/features/tasks/useTasks";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
@@ -246,19 +247,15 @@ export default function InboxPage() {
         </button>
       )}
 
-      {/* Mobile: the task opens as a fullscreen overlay ON the inbox (sliding
-          in from the right), stopping above the bottom tab bar — no detour
-          through the project view. */}
-      {isMobile && selectedTask && (
-        <div className="fixed inset-x-0 top-0 z-50 bg-background bottom-[calc(3.5rem+env(safe-area-inset-bottom))] overflow-hidden animate-in slide-in-from-right duration-300 ease-out">
-          <TaskDetailPanel
-            key={selectedTask.id}
-            task={selectedTask}
-            workspaceId={project?.workspace_id}
-            onClose={closeMobilePanel}
-            isFullscreen
-          />
-        </div>
+      {/* Mobile: the task opens as a fullscreen overlay ON the inbox (slides
+          in from the right, slides back out on close) — no detour through the
+          project view. */}
+      {isMobile && (
+        <MobileTaskOverlay
+          task={selectedTask}
+          workspaceId={project?.workspace_id}
+          onClose={closeMobilePanel}
+        />
       )}
     </div>
   );

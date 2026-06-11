@@ -59,6 +59,7 @@ import { SectionBlock } from "@/features/sections/SectionBlock";
 import { SortableSection, sectionRowId } from "@/features/sections/SortableSection";
 import { SortableTaskRow } from "@/features/tasks/SortableTaskRow";
 import { TaskDetailPanel } from "@/features/tasks/TaskDetailPanel";
+import { MobileTaskOverlay } from "@/features/tasks/MobileTaskOverlay";
 import { TaskListHeader } from "@/features/tasks/TaskListHeader";
 import { TaskRow } from "@/features/tasks/TaskRow";
 import { TaskSearchCombobox } from "@/features/tasks/TaskSearchCombobox";
@@ -1043,19 +1044,13 @@ function MyTasksMobile() {
     <div className="relative h-full">
       <MobileMyTasksList />
 
-      {selectedTask && (
-        // Stops above the 56px bottom tab bar (+ safe area) so the nav stays
-        // reachable while a task is open — same as the project view.
-        <div className="fixed inset-x-0 top-0 z-50 bg-background bottom-[calc(3.5rem+env(safe-area-inset-bottom))] overflow-hidden animate-in slide-in-from-right duration-300 ease-out">
-          <TaskDetailPanel
-            key={`${selectedTask.id}-fs`}
-            task={selectedTask}
-            workspaceId={selectedTask.project?.workspace_id}
-            onClose={closePanel}
-            isFullscreen
-          />
-        </div>
-      )}
+      {/* Slides in from the right on open, back out on close; stops above
+          the bottom tab bar so the nav stays reachable. */}
+      <MobileTaskOverlay
+        task={selectedTask}
+        workspaceId={selectedTask?.project?.workspace_id}
+        onClose={closePanel}
+      />
     </div>
   );
 }
