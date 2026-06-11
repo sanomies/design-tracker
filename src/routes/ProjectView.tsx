@@ -134,12 +134,22 @@ export default function ProjectView() {
             shared TaskList's hook count mid-render. */}
         <div className="flex-1 min-h-0">
           {isMobile ? (
-            <MobileTaskList
-              projectId={projectId}
-              workspaceId={workspace?.id}
-              projectName={project?.name ?? ""}
-              projectColor={project?.color}
-            />
+            // Clip + slide the board in from the right on each project open
+            // (keyed by projectId so switching projects re-animates). The
+            // board scrolls internally, so overflow-hidden here is safe.
+            <div className="h-full overflow-hidden">
+              <div
+                key={projectId}
+                className="h-full animate-in slide-in-from-right duration-300 ease-out"
+              >
+                <MobileTaskList
+                  projectId={projectId}
+                  workspaceId={workspace?.id}
+                  projectName={project?.name ?? ""}
+                  projectColor={project?.color}
+                />
+              </div>
+            </div>
           ) : (
             <TaskList projectId={projectId} workspaceId={workspace?.id} />
           )}
@@ -216,7 +226,7 @@ export default function ProjectView() {
           className={cn(
             "fixed inset-x-0 top-0 z-50 bg-background",
             isMobile
-              ? "bottom-[calc(3.5rem+env(safe-area-inset-bottom))]"
+              ? "bottom-[calc(3.5rem+env(safe-area-inset-bottom))] overflow-hidden animate-in slide-in-from-right duration-300 ease-out"
               : "bottom-0"
           )}
         >

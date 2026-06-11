@@ -1046,7 +1046,7 @@ function MyTasksMobile() {
       {selectedTask && (
         // Stops above the 56px bottom tab bar (+ safe area) so the nav stays
         // reachable while a task is open — same as the project view.
-        <div className="fixed inset-x-0 top-0 z-50 bg-background bottom-[calc(3.5rem+env(safe-area-inset-bottom))]">
+        <div className="fixed inset-x-0 top-0 z-50 bg-background bottom-[calc(3.5rem+env(safe-area-inset-bottom))] overflow-hidden animate-in slide-in-from-right duration-300 ease-out">
           <TaskDetailPanel
             key={`${selectedTask.id}-fs`}
             task={selectedTask}
