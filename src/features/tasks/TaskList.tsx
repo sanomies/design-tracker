@@ -669,6 +669,13 @@ export function TaskList({
             onDragCancel={finishDrag}
           >
             <div className="flex-1 min-h-0 overflow-y-auto">
+              {/* Inner wrapper sizes to the widest row (`w-max`) but never
+                  narrower than the viewport (`min-w-full`). This gives every
+                  row + the header ONE shared content width, so the row
+                  separators and the header background span the full
+                  horizontal scroll instead of stopping at the viewport edge
+                  (which made the dividers look broken when scrolled right). */}
+              <div className="w-max min-w-full">
               {/* Header lives INSIDE the scroll container so it shares the
                   same width as the rows below — when the scrollbar takes
                   width, both shrink together and the column dividers stay
@@ -725,6 +732,7 @@ export function TaskList({
                   </SortableSection>
                 ))}
               </SortableContext>
+              </div>
             </div>
 
             {/* Lifted "ghost" that follows the cursor. The source row /
@@ -861,7 +869,11 @@ export function TaskList({
               </div>
               {!doneCollapsed && (
                 <ul className="flex-1 min-h-0 overflow-y-auto divide-y-0">
-                  {sortedDoneTasks.map((task) => renderRow(task))}
+                  {/* Same shared-width wrapper as the main list so the Done
+                      rows' separators span the full horizontal scroll. */}
+                  <div className="w-max min-w-full">
+                    {sortedDoneTasks.map((task) => renderRow(task))}
+                  </div>
                 </ul>
               )}
             </div>
