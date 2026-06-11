@@ -164,9 +164,16 @@ export function MobileTaskList({
 
   const setSelectedTaskId = (id: string | null) => {
     const next = new URLSearchParams(searchParams);
-    if (id) next.set("task", id);
-    else next.delete("task");
-    setSearchParams(next, { replace: true });
+    if (id) {
+      next.set("task", id);
+      // Push (not replace) when opening a task so the browser / iOS swipe-back
+      // gesture pops the open task and returns to this list, instead of
+      // navigating away to the previous route (e.g. the projects menu).
+      setSearchParams(next);
+    } else {
+      next.delete("task");
+      setSearchParams(next, { replace: true });
+    }
   };
 
   const handleAddTask = async () => {
@@ -403,9 +410,16 @@ export function MobileMyTasksList() {
   const selectedTaskId = searchParams.get("task");
   const setSelectedTaskId = (id: string | null) => {
     const next = new URLSearchParams(searchParams);
-    if (id) next.set("task", id);
-    else next.delete("task");
-    setSearchParams(next, { replace: true });
+    if (id) {
+      next.set("task", id);
+      // Push (not replace) when opening a task so the browser / iOS swipe-back
+      // gesture pops the open task and returns to this list, instead of
+      // navigating away to the previous route (e.g. the projects menu).
+      setSearchParams(next);
+    } else {
+      next.delete("task");
+      setSearchParams(next, { replace: true });
+    }
   };
 
   const toggleDone = (task: Task) => {
