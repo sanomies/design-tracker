@@ -581,10 +581,14 @@ function MobileBoardBody({
   }
 
   return (
-    // overscroll-x-none disables the horizontal rubber-band bounce: without
-    // it, pulling past the left edge drags the whole board (incl. the pinned
-    // Name column + section titles) to the right. Now they stay locked left.
-    <div className="flex-1 min-h-0 overflow-auto overscroll-x-none">
+    // overscroll-none disables the rubber-band bounce on BOTH axes:
+    //  - horizontal: pulling past the left edge would drag the whole board
+    //    (incl. the pinned Name column + section titles) to the right.
+    //  - vertical: overscrolling at the top bounced the list content (sticky
+    //    Name header included) downward, opening a gap below the action row
+    //    and exposing the horizontal scrollbar. It also stops scroll-chaining
+    //    to the outer <main> scroller. The columns/list still scroll in range.
+    <div className="flex-1 min-h-0 overflow-auto overscroll-none">
       <div style={{ width: innerWidth }} className="min-w-full">
         {/* Sticky column header. Top-0 keeps it pinned vertically; its Name
             cell is also sticky-left so the "Name" label stays visible while
