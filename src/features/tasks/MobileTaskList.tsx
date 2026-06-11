@@ -581,7 +581,10 @@ function MobileBoardBody({
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-auto">
+    // overscroll-x-none disables the horizontal rubber-band bounce: without
+    // it, pulling past the left edge drags the whole board (incl. the pinned
+    // Name column + section titles) to the right. Now they stay locked left.
+    <div className="flex-1 min-h-0 overflow-auto overscroll-x-none">
       <div style={{ width: innerWidth }} className="min-w-full">
         {/* Sticky column header. Top-0 keeps it pinned vertically; its Name
             cell is also sticky-left so the "Name" label stays visible while
