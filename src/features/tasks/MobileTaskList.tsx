@@ -51,7 +51,7 @@ const COL_PUBLICATION = 130;
 const COL_ASSIGNEE = 140;
 const COL_DUE = 100;
 const COL_TYPE = 110;
-const NAME_MIN = 200;
+const NAME_MIN = 250;
 
 const COLLAPSED_STORAGE_PREFIX = "design-tracker:collapsed-sections:";
 const DONE_COLLAPSED_STORAGE_PREFIX = "design-tracker:done-collapsed:";
@@ -684,7 +684,13 @@ function MobileSection({
         // Sticky-left so the section title stays visible while the metadata
         // cells scroll horizontally. Tap the title to rename; long-press
         // (context menu) to delete. Pinned sections (Unassigned) are inert.
-        <div className="sticky left-0 z-10 flex items-center gap-2 px-3 py-1.5 bg-background">
+        // `w-fit` (capped to the Name column width) is load-bearing: a
+        // full-width sticky element can't offset, so it would scroll away.
+        // Content-width lets `sticky left-0` actually pin the title.
+        <div
+          className="sticky left-0 z-10 flex w-fit items-center gap-2 px-3 py-1.5 bg-background"
+          style={{ maxWidth: NAME_MIN }}
+        >
           <button
             type="button"
             onClick={onToggleCollapsed}
@@ -706,7 +712,7 @@ function MobileSection({
               e.preventDefault();
               onDeleteClick();
             }}
-            className="text-lg font-semibold truncate text-left"
+            className="min-w-0 text-lg font-semibold truncate text-left"
             title={label}
           >
             {label}
@@ -759,7 +765,7 @@ function DoneSection({
       <button
         type="button"
         onClick={onToggleCollapsed}
-        className="sticky left-0 z-10 w-auto flex items-center gap-2 px-3 py-2 text-left bg-[#F6F9F9]"
+        className="sticky left-0 z-10 w-fit flex items-center gap-2 px-3 py-2 text-left bg-[#F6F9F9]"
         aria-label={collapsed ? "Expand Done section" : "Collapse Done section"}
       >
         <IconChevronDown
