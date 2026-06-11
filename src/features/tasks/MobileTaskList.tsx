@@ -632,7 +632,9 @@ function HeaderCell({
         // The Name cell also pins horizontally; raise its z-index above the
         // rest of the header row so the column dividers don't show through
         // during a horizontal scroll.
-        sticky && "sticky left-0 z-10"
+        // touch-pan-y: a horizontal drag that starts on the pinned Name
+        // column is vertical-only, so it doesn't scroll the metadata columns.
+        sticky && "sticky left-0 z-10 touch-pan-y"
       )}
     >
       <span className="truncate">{children}</span>
@@ -691,7 +693,7 @@ function MobileSection({
         // full-width sticky element can't offset, so it would scroll away.
         // Content-width lets `sticky left-0` actually pin the title.
         <div
-          className="sticky left-0 z-10 flex w-fit items-center gap-2 px-3 py-1.5 bg-background"
+          className="sticky left-0 z-10 flex w-fit items-center gap-2 px-3 py-1.5 bg-background touch-pan-y"
           style={{ maxWidth: NAME_MIN }}
         >
           <button
@@ -768,7 +770,7 @@ function DoneSection({
       <button
         type="button"
         onClick={onToggleCollapsed}
-        className="sticky left-0 z-10 w-fit flex items-center gap-2 px-3 py-2 text-left bg-[#F6F9F9]"
+        className="sticky left-0 z-10 w-fit flex items-center gap-2 px-3 py-2 text-left bg-[#F6F9F9] touch-pan-y"
         aria-label={collapsed ? "Expand Done section" : "Collapse Done section"}
       >
         <IconChevronDown
@@ -885,7 +887,7 @@ function MobileTaskRow({
       <div
         style={{ width: NAME_MIN, minWidth: NAME_MIN }}
         className={cn(
-          "sticky left-0 z-10 shrink-0 flex items-center gap-2 px-3 py-2",
+          "sticky left-0 z-10 shrink-0 flex items-center gap-2 px-3 py-2 touch-pan-y",
           rowBg
         )}
       >
