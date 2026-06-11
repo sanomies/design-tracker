@@ -381,7 +381,10 @@ function CommentRow({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 text-[#708597] hover:text-foreground opacity-0 group-hover/comment:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+                  className={cn(
+                    "h-6 w-6 text-[#708597] hover:text-foreground",
+                    actionVisibility
+                  )}
                   aria-label="Add reaction"
                 >
                   <IconSmilePlus className="h-[18px] w-[18px]" />
