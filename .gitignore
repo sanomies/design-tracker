@@ -41,3 +41,6 @@ pnpm-debug.log*
 
 # supabase CLI local cache (project ref, version files, etc.)
 supabase/.temp/
+
+# one-off Asana export + import script (large data dump; not part of the app)
+asana/
