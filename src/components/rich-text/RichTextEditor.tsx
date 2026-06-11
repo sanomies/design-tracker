@@ -59,6 +59,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { cn } from "@/lib/utils";
 import type { Profile } from "@/types/database";
 
@@ -1037,6 +1038,10 @@ function Toolbar({
   onTriggerImage,
   onOpenBanners,
 }: ToolbarProps) {
+  // On mobile, keep only the first 6 icons (Insert, Undo, Redo, Bold, Italic,
+  // Underline); the rest are hidden to avoid the toolbar wrapping to multiple
+  // rows. The Insert (+) menu still reaches images/emoji/embeds/banners.
+  const isMobile = useIsMobile();
   return (
     <div
       // Prevent clicks on the toolbar's empty space from stealing focus
@@ -1096,6 +1101,9 @@ function Toolbar({
       >
         <UnderlineIcon className="h-3.5 w-3.5" />
       </ToolbarButton>
+      {/* Icons 7+ — hidden on mobile (only the first 6 show there). */}
+      {!isMobile && (
+        <>
       <ToolbarButton
         label="Strikethrough"
         active={editor.isActive("strike")}
@@ -1172,6 +1180,8 @@ function Toolbar({
       >
         <Code2 className="h-3.5 w-3.5" />
       </ToolbarButton>
+        </>
+      )}
 
       {/* Modal flows triggered from the Insert (+) menu. */}
       <UrlDialog
