@@ -296,8 +296,8 @@ function PanelBody({
                 rows than the other. Field order from the Figma:
                   Left  → Brand · Assignee · Due Date
                   Right → Type  · Priority · Section */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0">
-              <div className="divide-y divide-[#DEDFE0]">
+            <div className="grid grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-0">
+              <div className="min-w-0 divide-y divide-[#DEDFE0]">
                 <PropertyRow
                   label="Brand"
                   compact={isMobile}
@@ -328,7 +328,7 @@ function PanelBody({
                   />
                 </PropertyRow>
               </div>
-              <div className="divide-y divide-[#DEDFE0]">
+              <div className="min-w-0 divide-y divide-[#DEDFE0]">
                 <PropertyRow label="Type" compact={isMobile} icon={<Tag className="h-[18px] w-[18px] text-foreground" />}>
                   <TypeInline
                     value={task.type}
