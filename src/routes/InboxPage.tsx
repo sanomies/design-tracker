@@ -115,17 +115,22 @@ export default function InboxPage() {
   const onSelect = (n: NotificationView) => {
     if (!n.read_at) markRead.mutate(n.id);
     if (!n.task_id) return;
-    // On mobile there is no side panel — route into the task's project view
-    // with `?task=` so the existing fullscreen mobile task view takes over.
     if (isMobile) {
-      const targetProjectId = n.task?.project_id;
-      if (targetProjectId) {
-        navigate(`/projects/${targetProjectId}?task=${n.task_id}`);
-      }
+      // Open the task as a fullscreen overlay ON the inbox — don't route into
+      // the project first. PUSH a history entry (not replace) so the iOS
+      // back-swipe / system back closes the task and lands straight back on
+      // the inbox.
+      const next = new URLSearchParams(searchParams);
+      next.set("task", n.task_id);
+      setSearchParams(next, { replace: false });
       return;
     }
     setSelectedTaskId(n.task_id === selectedTaskId ? null : n.task_id);
   };
+
+  // Mobile task close (X) mirrors the back-swipe: pop the pushed history
+  // entry so we return to the inbox exactly as the gesture would.
+  const closeMobilePanel = () => navigate(-1);
 
   const onToggleRead = (n: NotificationView) => {
     if (n.read_at) markUnread.mutate(n.id);
@@ -239,6 +244,21 @@ export default function InboxPage() {
             )}
           />
         </button>
+      )}
+
+      {/* Mobile: the task opens as a fullscreen overlay ON the inbox (sliding
+          in from the right), stopping above the bottom tab bar — no detour
+          through the project view. */}
+      {isMobile && selectedTask && (
+        <div className="fixed inset-x-0 top-0 z-50 bg-background bottom-[calc(3.5rem+env(safe-area-inset-bottom))] overflow-hidden animate-in slide-in-from-right duration-300 ease-out">
+          <TaskDetailPanel
+            key={selectedTask.id}
+            task={selectedTask}
+            workspaceId={project?.workspace_id}
+            onClose={closeMobilePanel}
+            isFullscreen
+          />
+        </div>
       )}
     </div>
   );
