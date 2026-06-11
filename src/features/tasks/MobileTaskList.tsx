@@ -688,45 +688,52 @@ function MobileSection({
 }) {
   const hasHeader = label !== null;
   return (
-    <div className={cn(hasHeader && "pt-4 pb-1")}>
+    <div>
       {hasHeader && (
-        // Sticky-left so the section title stays visible while the metadata
-        // cells scroll horizontally. Tap the title to rename; long-press
-        // (context menu) to delete. Pinned sections (Unassigned) are inert.
-        // `w-fit` (capped to the Name column width) is load-bearing: a
-        // full-width sticky element can't offset, so it would scroll away.
-        // Content-width lets `sticky left-0` actually pin the title.
-        <div
-          className="sticky left-0 z-10 flex w-fit items-center gap-2 px-3 py-1.5 bg-background touch-pan-y"
-          style={{ maxWidth: NAME_MIN }}
-        >
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            className="h-[18px] w-[18px] flex items-center justify-center text-foreground/80 rounded"
-            aria-label={collapsed ? "Expand section" : "Collapse section"}
+        // The pt-4/pb-1 vertical gap lives on this full-width band rather than
+        // the section wrapper: the wrapper is an ancestor of the metadata
+        // cells, so touch-pan-y on it would also disable their horizontal
+        // scroll (touch-action intersects with ancestors). This band has no
+        // metadata descendants, so making it vertical-only is safe — it stops
+        // a horizontal drag in the inter-section gap, or to the right of the
+        // title, from scrolling the metadata columns.
+        <div className="pt-4 pb-1 touch-pan-y">
+          {/* Sticky-left so the title stays visible while the metadata cells
+              scroll. `w-fit` (capped to the Name column width) is load-bearing:
+              a full-width sticky element can't offset, so it would scroll away.
+              Tap to rename; long-press (context menu) to delete. */}
+          <div
+            className="sticky left-0 z-10 flex w-fit items-center gap-2 px-3 py-1.5 bg-background touch-pan-y"
+            style={{ maxWidth: NAME_MIN }}
           >
-            <IconChevronDown
-              className={cn(
-                "h-[18px] w-[18px] transition-transform",
-                collapsed && "-rotate-90"
-              )}
-            />
-          </button>
-          <button
-            type="button"
-            onClick={pinned ? onToggleCollapsed : onRenameClick}
-            onContextMenu={(e) => {
-              if (pinned) return;
-              e.preventDefault();
-              onDeleteClick();
-            }}
-            className="min-w-0 text-lg font-semibold truncate text-left"
-            title={label}
-          >
-            {label}
-          </button>
-          <SectionCount style={countStyle}>{count}</SectionCount>
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              className="h-[18px] w-[18px] flex items-center justify-center text-foreground/80 rounded"
+              aria-label={collapsed ? "Expand section" : "Collapse section"}
+            >
+              <IconChevronDown
+                className={cn(
+                  "h-[18px] w-[18px] transition-transform",
+                  collapsed && "-rotate-90"
+                )}
+              />
+            </button>
+            <button
+              type="button"
+              onClick={pinned ? onToggleCollapsed : onRenameClick}
+              onContextMenu={(e) => {
+                if (pinned) return;
+                e.preventDefault();
+                onDeleteClick();
+              }}
+              className="min-w-0 text-lg font-semibold truncate text-left"
+              title={label}
+            >
+              {label}
+            </button>
+            <SectionCount style={countStyle}>{count}</SectionCount>
+          </div>
         </div>
       )}
 
@@ -770,40 +777,51 @@ function DoneSection({
   onToggleDone?: (task: Task) => void;
 }) {
   return (
-    <div className="mt-6 bg-[#F6F9F9] border-t border-[#DEDFE0]">
-      <button
-        type="button"
-        onClick={onToggleCollapsed}
-        className="sticky left-0 z-10 w-fit flex items-center gap-2 px-3 py-2 text-left bg-[#F6F9F9] touch-pan-y"
-        aria-label={collapsed ? "Expand Done section" : "Collapse Done section"}
-      >
-        <IconChevronDown
-          className={cn(
-            "h-[18px] w-[18px] text-foreground/80 transition-transform",
-            collapsed && "-rotate-90"
-          )}
-        />
-        {/* Figma's Done header is just chevron + label — no count chip. */}
-        <h2 className="text-lg font-semibold">Done</h2>
-      </button>
-      {!collapsed && (
-        <ul className="flex flex-col">
-          {tasks.map((task) => (
-            <MobileTaskRow
-              key={task.id}
-              task={task}
-              workspaceId={resolveWorkspaceId ? resolveWorkspaceId(task) : workspaceId}
-              selected={task.id === selectedTaskId}
-              onSelect={() =>
-                onSelectTask(task.id === selectedTaskId ? null : task.id)
-              }
-              onToggleDone={onToggleDone}
-              tinted
+    <>
+      {/* The gap above the Done section, as a vertical-only leaf so a
+          horizontal drag in it doesn't scroll the metadata columns. Replaces
+          the old mt-6 margin (a touch on a margin hits the scrollable parent,
+          which is an ancestor of the metadata). */}
+      <div className="h-6 touch-pan-y" aria-hidden />
+      <div className="bg-[#F6F9F9] border-t border-[#DEDFE0]">
+        {/* Full-width vertical-only band (no metadata descendants) so dragging
+            to the right of the Done title doesn't scroll the columns. */}
+        <div className="touch-pan-y">
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            className="sticky left-0 z-10 w-fit flex items-center gap-2 px-3 py-2 text-left bg-[#F6F9F9] touch-pan-y"
+            aria-label={collapsed ? "Expand Done section" : "Collapse Done section"}
+          >
+            <IconChevronDown
+              className={cn(
+                "h-[18px] w-[18px] text-foreground/80 transition-transform",
+                collapsed && "-rotate-90"
+              )}
             />
-          ))}
-        </ul>
-      )}
-    </div>
+            {/* Figma's Done header is just chevron + label — no count chip. */}
+            <h2 className="text-lg font-semibold">Done</h2>
+          </button>
+        </div>
+        {!collapsed && (
+          <ul className="flex flex-col">
+            {tasks.map((task) => (
+              <MobileTaskRow
+                key={task.id}
+                task={task}
+                workspaceId={resolveWorkspaceId ? resolveWorkspaceId(task) : workspaceId}
+                selected={task.id === selectedTaskId}
+                onSelect={() =>
+                  onSelectTask(task.id === selectedTaskId ? null : task.id)
+                }
+                onToggleDone={onToggleDone}
+                tinted
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
   );
 }
 
