@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Image from "@tiptap/extension-image";
 import {
   NodeViewWrapper,
@@ -8,6 +9,7 @@ import { Download, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
+import { ImageLightbox } from "./ImageLightbox";
 import { downloadImage } from "./inlineImageUtils";
 
 /**
@@ -26,6 +28,7 @@ function EditorImageView({ node, deleteNode, editor }: NodeViewProps) {
   const src = String(node.attrs.src ?? "");
   const alt = String(node.attrs.alt ?? "");
   const editable = editor.isEditable;
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   if (!src) return null;
 
@@ -37,9 +40,18 @@ function EditorImageView({ node, deleteNode, editor }: NodeViewProps) {
         // `tiptap-image` opts into the shared rounded + border styling
         // defined in rich-text.css, matching how the read-only renderer
         // displays the same image.
-        className="tiptap-image max-w-full h-auto block !my-0"
+        className="tiptap-image max-w-full h-auto block !my-0 cursor-zoom-in"
         draggable={false}
+        // Open the lightbox instead of letting the editor select the node;
+        // delete is still available via the hover overlay button.
+        onClick={(e) => {
+          e.stopPropagation();
+          setLightboxOpen(true);
+        }}
       />
+      {lightboxOpen && (
+        <ImageLightbox src={src} alt={alt} onClose={() => setLightboxOpen(false)} />
+      )}
       <span
         // `contentEditable=false` on the overlay so the editor's pointer
         // selection logic doesn't try to place the cursor inside the

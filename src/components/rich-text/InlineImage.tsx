@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Download, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { ImageLightbox } from "./ImageLightbox";
 import { downloadImage } from "./inlineImageUtils";
 
 type Props = {
@@ -22,14 +24,22 @@ type Props = {
  * with text, but `max-w-full` keeps wide images from overflowing the bubble.
  */
 export function InlineImage({ src, alt, className, onDelete }: Props) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   return (
     <span className="tiptap-inline-image relative inline-block group max-w-full align-middle leading-none my-2">
       <img
         src={src}
         alt={alt ?? ""}
-        className={cn("tiptap-image max-w-full h-auto block !my-0", className)}
+        className={cn(
+          "tiptap-image max-w-full h-auto block !my-0 cursor-zoom-in",
+          className
+        )}
         draggable={false}
+        onClick={() => setLightboxOpen(true)}
       />
+      {lightboxOpen && (
+        <ImageLightbox src={src} alt={alt} onClose={() => setLightboxOpen(false)} />
+      )}
       <span className="absolute top-2 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         <Button
           type="button"
