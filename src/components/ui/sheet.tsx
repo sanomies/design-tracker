@@ -39,11 +39,14 @@ const sheetVariants = cva(
         left: "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
         right:
           "inset-y-0 right-0 h-full w-3/4  border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
-        // Full-screen, no transition — appears in place (instant), like a
-        // native tab switch. Used by the mobile Projects / Search / You
-        // tabs so they swap in exactly like the routed Inbox / My Tasks
-        // pages (no bottom slide, no fade).
-        full: "inset-0",
+        // Full-screen, no transition — appears AND disappears instantly,
+        // like a native tab switch. The !duration-0 is load-bearing: the
+        // base class adds data-[state=closed]:animate-out + duration-300, so
+        // without this Radix keeps the sheet mounted (covering the page) for
+        // 300ms on close — which hides the project-view slide-in that starts
+        // at the same moment. Forcing 0 duration makes the sheet unmount
+        // immediately so the slide is visible.
+        full: "inset-0 data-[state=open]:!duration-0 data-[state=closed]:!duration-0",
       },
     },
     defaultVariants: {
