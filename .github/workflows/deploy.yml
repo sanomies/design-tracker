@@ -12,7 +12,12 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # Do NOT cancel in-progress runs. Cancelling a build mid-flight (after it
+  # has already uploaded its github-pages artifact) leaves stray artifacts,
+  # which makes deploy-pages fail with "Multiple artifacts named github-pages
+  # were unexpectedly found". Let deployments finish; queue the rest. This is
+  # GitHub's recommended setting for Pages.
+  cancel-in-progress: false
 
 jobs:
   build:
