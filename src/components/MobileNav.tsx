@@ -292,20 +292,22 @@ function MobileProjectsSheet({
         >
           <SheetTitle className="sr-only">Projects</SheetTitle>
 
-          <header className="flex items-center gap-2 px-4 pt-4 pb-2">
-            <Folder className="h-6 w-6 text-black" strokeWidth={1.75} />
-            <h2 className="flex-1 text-[18px] font-semibold leading-tight text-black">
-              Projects
-            </h2>
-            <button
-              type="button"
-              onClick={() => setNewOpen(true)}
-              disabled={!workspace?.id}
-              aria-label="New project"
-              className="-mr-1 flex h-9 w-9 items-center justify-center rounded-lg text-black transition-colors hover:bg-[#EDF2F4] disabled:opacity-40"
-            >
-              <Plus className="h-6 w-6" strokeWidth={1.75} />
-            </button>
+          <header className="shrink-0 px-4 pt-4 pb-2">
+            <div className="flex h-[41px] items-center gap-2 min-w-0">
+              <Folder className="h-6 w-6 shrink-0 text-foreground" strokeWidth={1.75} />
+              <h2 className="flex-1 text-lg font-semibold leading-tight truncate text-foreground">
+                Projects
+              </h2>
+              <button
+                type="button"
+                onClick={() => setNewOpen(true)}
+                disabled={!workspace?.id}
+                aria-label="New project"
+                className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-[#EDF2F4] disabled:opacity-40"
+              >
+                <Plus className="h-6 w-6" strokeWidth={1.75} />
+              </button>
+            </div>
           </header>
 
           <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-6 pt-2">
@@ -489,11 +491,13 @@ function MobileAccountSheet({
         >
           <SheetTitle className="sr-only">Profile</SheetTitle>
 
-          <header className="flex items-center gap-2 px-4 pt-4 pb-2">
-            <UserCircle2 className="h-6 w-6 text-black" strokeWidth={1.75} />
-            <h2 className="text-[18px] font-semibold leading-tight text-black">
-              Profile
-            </h2>
+          <header className="shrink-0 px-4 pt-4 pb-2">
+            <div className="flex h-[41px] items-center gap-2 min-w-0">
+              <UserCircle2 className="h-6 w-6 shrink-0 text-foreground" strokeWidth={1.75} />
+              <h2 className="text-lg font-semibold leading-tight text-foreground">
+                Profile
+              </h2>
+            </div>
           </header>
 
           {/* Top-aligned, scrollable. Children flow from the top — identity

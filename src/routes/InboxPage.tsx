@@ -148,8 +148,16 @@ export default function InboxPage() {
             search pill sits at the right (mirrors ProjectView's chrome); on
             mobile the search lives in the bottom nav, so the header stays the
             clean bell/title/count row the Figma shows. */}
-        <header className="shrink-0 bg-white border-b border-[#DEDFE0] p-4 flex items-center gap-3">
-          <div className="flex items-center gap-2 py-2 flex-1 min-w-0">
+        <header
+          className={cn(
+            "shrink-0 bg-white px-4 pt-4 pb-2 flex items-center gap-3",
+            // Board headers have no divider under the title; keep the rule on
+            // desktop (it separates the header from the side panel) but drop
+            // it on mobile so the title row matches the other tabs.
+            !isMobile && "border-b border-[#DEDFE0]"
+          )}
+        >
+          <div className="flex h-[41px] items-center gap-2 flex-1 min-w-0">
             <IconBell className="h-6 w-6 shrink-0 text-foreground" aria-hidden />
             <h1 className="text-lg font-semibold leading-tight">Inbox</h1>
             {unreadCount > 0 && (
