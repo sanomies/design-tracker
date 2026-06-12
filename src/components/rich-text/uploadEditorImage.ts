@@ -96,9 +96,18 @@ export async function uploadEditorFile(file: File, taskId: string): Promise<stri
   const ext = extensionForMime(file.type) ?? extensionFromName(file.name) ?? "bin";
   const path = `${taskId}/${crypto.randomUUID()}.${ext}`;
 
+  // supabase-js ignores the `contentType` option for File/Blob bodies: it
+  // uploads them via FormData, where the multipart part's Content-Type is the
+  // Blob's OWN `.type`. The bucket's allowed_mime_types (migration 0027) is
+  // validated against THAT, so a type we meant to normalize to octet-stream
+  // (e.g. .ods → application/vnd.oasis.opendocument.spreadsheet) gets rejected
+  // outright. Re-wrap the file in a Blob carrying the resolved contentType so
+  // the type we intend is the type the server validates and stores.
+  const body = new Blob([file], { type: contentType });
+
   const { error: uploadError } = await supabase.storage
     .from(EDITOR_IMAGES_BUCKET)
-    .upload(path, file, {
+    .upload(path, body, {
       contentType,
       upsert: false,
     });
