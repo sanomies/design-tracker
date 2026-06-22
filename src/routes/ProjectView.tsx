@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProjectLetterPill } from "@/features/projects/ProjectRow";
 import { useProjects } from "@/features/projects/useProjects";
+import { useMarkProjectSeen } from "@/features/projects/useUnseenProjects";
 import { MobileTaskList } from "@/features/tasks/MobileTaskList";
 import { TaskDetailPanel } from "@/features/tasks/TaskDetailPanel";
 import { MobileTaskOverlay } from "@/features/tasks/MobileTaskOverlay";
@@ -38,6 +39,15 @@ export default function ProjectView() {
       // private mode / quota — ignore
     }
   }, [projectId, project]);
+
+  // Opening a project marks it seen, clearing its "unseen tasks" dot in the
+  // sidebar. Fire on projectId change (not project load) so it still clears
+  // when navigating between projects.
+  const markProjectSeen = useMarkProjectSeen();
+  useEffect(() => {
+    if (projectId) markProjectSeen.mutate(projectId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedTaskId = searchParams.get("task");

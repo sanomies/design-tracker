@@ -122,6 +122,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      project_seen: {
+        Row: {
+          project_id: string;
+          user_id: string;
+          last_seen_at: string;
+        };
+        Insert: {
+          project_id: string;
+          user_id: string;
+          last_seen_at?: string;
+        };
+        Update: {
+          project_id?: string;
+          user_id?: string;
+          last_seen_at?: string;
+        };
+        Relationships: [];
+      };
       sections: {
         Row: {
           id: string;
@@ -513,6 +531,14 @@ export type Database = {
         Args: { _task_id: string };
         Returns: string;
       };
+      mark_project_seen: {
+        Args: { _project_id: string };
+        Returns: undefined;
+      };
+      unseen_project_ids: {
+        Args: Record<string, never>;
+        Returns: string[];
+      };
       invitation_by_token: {
         Args: { _token: string };
         Returns: Array<{
@@ -546,6 +572,7 @@ export type Workspace = T["workspaces"]["Row"];
 export type WorkspaceMember = T["workspace_members"]["Row"];
 export type Project = T["projects"]["Row"];
 export type ProjectMember = T["project_members"]["Row"];
+export type ProjectSeen = T["project_seen"]["Row"];
 export type Section = T["sections"]["Row"];
 export type MyTaskSection = T["my_task_sections"]["Row"];
 export type Task = T["tasks"]["Row"];

@@ -39,6 +39,7 @@ import {
   useDeleteProject,
   useProjects,
 } from "@/features/projects/useProjects";
+import { useUnseenProjects } from "@/features/projects/useUnseenProjects";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -275,6 +276,7 @@ function MobileProjectsSheet({
 }) {
   const { data: workspace } = useWorkspace();
   const { data: projects } = useProjects(workspace?.id);
+  const unseen = useUnseenProjects();
   const navigate = useNavigate();
   const [newOpen, setNewOpen] = useState(false);
 
@@ -316,6 +318,7 @@ function MobileProjectsSheet({
                 <MobileProjectCard
                   key={project.id}
                   project={project}
+                  hasUnseen={unseen.has(project.id)}
                   onOpen={() => navigate(`/projects/${project.id}`)}
                 />
               ))}
@@ -346,9 +349,11 @@ function MobileProjectsSheet({
 
 function MobileProjectCard({
   project,
+  hasUnseen = false,
   onOpen,
 }: {
   project: Project;
+  hasUnseen?: boolean;
   onOpen: () => void;
 }) {
   const [editOpen, setEditOpen] = useState(false);
@@ -363,9 +368,18 @@ function MobileProjectCard({
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
           <ProjectLetterPill color={project.color} name={project.name} />
-          <span className="truncate text-sm font-medium text-black">
+          <span className="min-w-0 truncate text-sm font-medium text-black">
             {project.name}
           </span>
+          {hasUnseen && (
+            <>
+              <span
+                aria-hidden
+                className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
+              />
+              <span className="sr-only">— has new tasks</span>
+            </>
+          )}
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

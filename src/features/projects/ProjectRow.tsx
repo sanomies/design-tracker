@@ -66,7 +66,13 @@ export function ProjectLetterPill({
   );
 }
 
-export function ProjectRow({ project }: { project: Project }) {
+export function ProjectRow({
+  project,
+  hasUnseen = false,
+}: {
+  project: Project;
+  hasUnseen?: boolean;
+}) {
   const navigate = useNavigate();
   // Replaces NavLink's render-prop isActive — we can't use NavLink
   // here because the browser-native click on <a> kept racing with
@@ -144,7 +150,19 @@ export function ProjectRow({ project }: { project: Project }) {
         )}
       >
         <ProjectLetterPill color={project.color} name={project.name} />
-        <span className="truncate flex-1">{project.name}</span>
+        <span className="min-w-0 truncate">{project.name}</span>
+        {hasUnseen && (
+          <>
+            <span
+              aria-hidden
+              className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
+            />
+            <span className="sr-only">— has new tasks</span>
+          </>
+        )}
+        {/* Spacer keeps the whole row width clickable and the dot tucked in
+            right after the name instead of floating to the far edge. */}
+        <span className="flex-1" />
       </div>
 
       <DropdownMenu>

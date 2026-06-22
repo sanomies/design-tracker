@@ -32,6 +32,7 @@ import { useAuth } from "@/features/auth/AuthProvider";
 import { InboxLink } from "@/features/notifications/InboxLink";
 import { NewProjectDialog } from "@/features/projects/NewProjectDialog";
 import { ProjectRow } from "@/features/projects/ProjectRow";
+import { useUnseenProjects } from "@/features/projects/useUnseenProjects";
 import { useProjects, useReorderProject } from "@/features/projects/useProjects";
 import { MyTasksLink } from "@/features/tasks/MyTasksLink";
 import { useCurrentWorkspaceId } from "@/features/workspaces/CurrentWorkspaceProvider";
@@ -188,6 +189,7 @@ export function WorkspaceSwitcher({
 
 export function ProjectsSection({ workspaceId }: { workspaceId: string | undefined }) {
   const { data: projects, isLoading } = useProjects(workspaceId);
+  const unseen = useUnseenProjects();
   const reorderProject = useReorderProject(workspaceId);
   const [newOpen, setNewOpen] = useState(false);
 
@@ -271,7 +273,11 @@ export function ProjectsSection({ workspaceId }: { workspaceId: string | undefin
           >
             <div>
               {projects.map((project) => (
-                <ProjectRow key={project.id} project={project} />
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  hasUnseen={unseen.has(project.id)}
+                />
               ))}
             </div>
           </SortableContext>
