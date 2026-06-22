@@ -46,9 +46,12 @@ import {
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import type { Comment, CommentReaction, Profile } from "@/types/database";
+import type { Comment, CommentReaction, Profile, TaskActivity } from "@/types/database";
 
+import { ActivityRow } from "@/features/activity/ActivityRow";
+import { useTaskActivity } from "@/features/activity/useTaskActivity";
 import { ReactionPicker } from "./ReactionPicker";
+import { authorName, initials } from "./people";
 import {
   useComments,
   useCreateComment,
@@ -60,24 +63,12 @@ import {
   useToggleCommentReaction,
 } from "./useReactions";
 
-function initials(name: string | null | undefined): string {
-  if (!name) return "?";
-  return name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
-function authorName(authorId: string | null, members: Profile[], selfId: string | undefined): string {
-  if (!authorId) return "Unknown";
-  if (authorId === selfId) {
-    const me = members.find((m) => m.id === authorId);
-    return me?.full_name ?? "You";
-  }
-  return members.find((m) => m.id === authorId)?.full_name ?? "Unknown";
-}
+// The task detail stream interleaves user comments and system activity
+// entries, sorted by created_at. A discriminated union keeps the render
+// branch type-safe.
+type StreamEntry =
+  | { kind: "comment"; at: string; comment: Comment }
+  | { kind: "activity"; at: string; activity: TaskActivity };
 
 export function CommentList({
   taskId,
@@ -94,6 +85,7 @@ export function CommentList({
   const { user } = useAuth();
   const { data: members = [] } = useWorkspaceMembers(workspaceId);
   const { data: comments, isLoading } = useComments(taskId);
+  const { data: activity = [] } = useTaskActivity(taskId);
   const { data: reactions = [] } = useCommentReactions(taskId);
   const toggleReaction = useToggleCommentReaction(taskId);
   const updateComment = useUpdateComment(taskId);
@@ -107,6 +99,21 @@ export function CommentList({
     if (list) list.push(r);
     else reactionsByComment.set(r.comment_id, [r]);
   }
+
+  // Merge comments + activity into one chronological stream. On a created_at
+  // tie (a change made in the same instant as a comment), show the activity
+  // entry first.
+  const entries = useMemo<StreamEntry[]>(() => {
+    const items: StreamEntry[] = [];
+    for (const c of comments ?? []) items.push({ kind: "comment", at: c.created_at, comment: c });
+    for (const a of activity) items.push({ kind: "activity", at: a.created_at, activity: a });
+    items.sort((x, y) => {
+      if (x.at !== y.at) return x.at < y.at ? -1 : 1;
+      if (x.kind !== y.kind) return x.kind === "activity" ? -1 : 1;
+      return 0;
+    });
+    return items;
+  }, [comments, activity]);
 
   return (
     <div className="space-y-4">
@@ -128,45 +135,54 @@ export function CommentList({
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-12 w-3/4" />
         </div>
-      ) : comments && comments.length > 0 ? (
+      ) : entries.length > 0 ? (
         <ul className="divide-y divide-[#DEDFE0]">
-          {comments.map((c) => (
-            <CommentRow
-              key={c.id}
-              comment={c}
-              members={members}
-              selfId={user?.id}
-              taskId={taskId}
-              reactions={reactionsByComment.get(c.id) ?? []}
-              onToggleReaction={(emoji) =>
-                toggleReaction.mutate({ commentId: c.id, emoji })
-              }
-              onDeleteImage={async (src) => {
-                const nextBody = removeImageFromHtml(c.body, src);
-                await updateComment.mutateAsync({ commentId: c.id, body: nextBody });
-                // Storage cleanup is best-effort — the comment update already
-                // removed the visible reference.
-                void deleteTaskImageObject(src);
-              }}
-              onEdit={async (commentId, body) => {
-                await updateComment.mutateAsync({ commentId, body });
-              }}
-              onDelete={async (commentId) => {
-                // Snapshot inline image URLs BEFORE the row is gone so we
-                // can clean them out of storage after the row deletes
-                // successfully. Best-effort — comment is the source of
-                // truth, the orphaned blob is just wasted bytes.
-                const imageUrls = extractImageUrls(c.body);
-                await deleteComment.mutateAsync(commentId);
-                for (const url of imageUrls) {
-                  void deleteTaskImageObject(url);
+          {entries.map((e) =>
+            e.kind === "comment" ? (
+              <CommentRow
+                key={`c-${e.comment.id}`}
+                comment={e.comment}
+                members={members}
+                selfId={user?.id}
+                taskId={taskId}
+                reactions={reactionsByComment.get(e.comment.id) ?? []}
+                onToggleReaction={(emoji) =>
+                  toggleReaction.mutate({ commentId: e.comment.id, emoji })
                 }
-              }}
-            />
-          ))}
+                onDeleteImage={async (src) => {
+                  const nextBody = removeImageFromHtml(e.comment.body, src);
+                  await updateComment.mutateAsync({ commentId: e.comment.id, body: nextBody });
+                  // Storage cleanup is best-effort — the comment update already
+                  // removed the visible reference.
+                  void deleteTaskImageObject(src);
+                }}
+                onEdit={async (commentId, body) => {
+                  await updateComment.mutateAsync({ commentId, body });
+                }}
+                onDelete={async (commentId) => {
+                  // Snapshot inline image URLs BEFORE the row is gone so we
+                  // can clean them out of storage after the row deletes
+                  // successfully. Best-effort — comment is the source of
+                  // truth, the orphaned blob is just wasted bytes.
+                  const imageUrls = extractImageUrls(e.comment.body);
+                  await deleteComment.mutateAsync(commentId);
+                  for (const url of imageUrls) {
+                    void deleteTaskImageObject(url);
+                  }
+                }}
+              />
+            ) : (
+              <ActivityRow
+                key={`a-${e.activity.id}`}
+                activity={e.activity}
+                members={members}
+                selfId={user?.id}
+              />
+            )
+          )}
         </ul>
       ) : (
-        <p className="text-xs text-muted-foreground">No comments yet.</p>
+        <p className="text-xs text-muted-foreground">No activity yet.</p>
       )}
 
       {!hideComposer && (

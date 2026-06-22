@@ -12,7 +12,8 @@ type TableName =
   | "sections"
   | "my_task_sections"
   | "workspace_members"
-  | "notifications";
+  | "notifications"
+  | "task_activity";
 
 /**
  * Subscribes to Supabase Realtime `postgres_changes` for `table` and

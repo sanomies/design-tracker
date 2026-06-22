@@ -288,6 +288,41 @@ export type Database = {
         };
         Relationships: [];
       };
+      task_activity: {
+        Row: {
+          id: string;
+          task_id: string;
+          actor_id: string | null;
+          type:
+            | "created"
+            | "title_changed"
+            | "description_changed"
+            | "due_date_changed"
+            | "status_changed"
+            | "section_moved"
+            | "assignee_changed"
+            | "priority_changed";
+          data: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          actor_id?: string | null;
+          type: string;
+          data?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          task_id?: string;
+          actor_id?: string | null;
+          type?: string;
+          data?: Json;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       notifications: {
         Row: {
           id: string;
@@ -579,6 +614,7 @@ export type Task = T["tasks"]["Row"];
 export type TaskInsert = T["tasks"]["Insert"];
 export type TaskUpdate = T["tasks"]["Update"];
 export type Comment = T["comments"]["Row"];
+export type TaskActivity = T["task_activity"]["Row"];
 export type CommentReaction = T["comment_reactions"]["Row"];
 export type Attachment = T["attachments"]["Row"];
 export type WorkspaceInvitation = T["workspace_invitations"]["Row"];
