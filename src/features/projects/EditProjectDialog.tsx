@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Archive, ArchiveRestore } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ColorPicker } from "@/components/ui/color-picker";
@@ -88,6 +89,26 @@ export function EditProjectDialog({
     }
   };
 
+  // Archiving moves the project into the sidebar's ARCHIVE group (and
+  // unarchiving pulls it back into PROJECTS); the project and its tasks are
+  // untouched, so this just flips the flag and closes — no confirmation
+  // needed since it's fully reversible from this same dialog.
+  const onToggleArchive = async () => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await update.mutateAsync({
+        id: project.id,
+        patch: { archived: !project.archived },
+      });
+      onOpenChange(false);
+    } catch {
+      // Toast already fired in the mutation's onError.
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -117,6 +138,25 @@ export function EditProjectDialog({
           </div>
 
           <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onToggleArchive}
+              disabled={submitting}
+              className="sm:mr-auto"
+            >
+              {project.archived ? (
+                <>
+                  <ArchiveRestore className="mr-2 h-4 w-4" />
+                  Unarchive
+                </>
+              ) : (
+                <>
+                  <Archive className="mr-2 h-4 w-4" />
+                  Archive
+                </>
+              )}
+            </Button>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>

@@ -22,7 +22,7 @@ export function InboxLink() {
           "flex items-center gap-2 rounded-lg p-2 text-sm font-medium transition-colors",
           isActive
             ? "bg-[#EDF2F4] text-foreground"
-            : "hover:bg-[#EDF2F4]/60 text-foreground"
+            : "hover:bg-[#EDF2F4]/60 active:bg-[#EDF2F4]/60 text-foreground"
         )
       }
       aria-label={unread > 0 ? `Inbox (${unread} unread)` : "Inbox"}
