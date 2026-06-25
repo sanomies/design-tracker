@@ -40,7 +40,9 @@ export type Publication = {
   slug: string;
   name: string;
   category: PublicationCategory;
-  thumbnail: string;
+  // Optional: some catalogs (e.g. advertising clients) have no logo and
+  // render a neutral placeholder instead (see BrandThumb).
+  thumbnail?: string;
 };
 
 export const PUBLICATIONS: Publication[] = [
@@ -74,3 +76,9 @@ export const PUBLICATIONS: Publication[] = [
 ];
 
 export const PUBLICATION_CATEGORIES: PublicationCategory[] = ["Delfi", "Paper"];
+
+// Brand icon URL keyed by slug — lets other Delfi-brand catalogs (events,
+// editorial) reuse these SVGs with their own curated subset + display
+// names instead of re-importing the assets.
+export const BRAND_THUMBNAILS: Record<string, string | undefined> =
+  Object.fromEntries(PUBLICATIONS.map((p) => [p.slug, p.thumbnail]));

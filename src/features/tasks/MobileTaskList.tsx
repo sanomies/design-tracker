@@ -37,6 +37,7 @@ import type { MyTaskSection, Section, Task } from "@/types/database";
 import { TaskCheckbox } from "./TaskCheckbox";
 import { catalogItem, catalogType } from "./catalog";
 import { useCatalog } from "./CatalogProvider";
+import { BrandThumb } from "./BrandThumb";
 import {
   useCreateTask,
   useTasks,
@@ -949,11 +950,7 @@ function MobileTaskRow({
       >
         {publication ? (
           <>
-            <img
-              src={publication.thumbnail}
-              alt=""
-              className="h-6 w-6 rounded-full object-cover shrink-0"
-            />
+            <BrandThumb thumbnail={publication.thumbnail} className="h-6 w-6 rounded-full" />
             <span className="text-xs truncate">{publication.name}</span>
           </>
         ) : (

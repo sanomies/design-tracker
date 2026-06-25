@@ -1,33 +1,89 @@
-// A project's "kind" selects a catalog profile: which brand/product items
-// the picker offers, how they're grouped, what the field is called in the
-// UI ("Brand" vs "Product"), and which task-type set applies. Everything
-// downstream (picker, row cells, column header, filters, sort) reads the
-// active profile rather than importing a single global catalog, so the same
-// components serve both kinds — and cross-project views (My tasks) resolve
-// each row from its own project's profile.
+// A project's "kind" selects a catalog profile: which brand/product/client
+// items the picker offers, how they're grouped, what the field is called in
+// the UI ("Brand" / "Product" / "Klient"), and which task-type set applies.
+// Everything downstream (picker, row cells, column header, filters, sort)
+// reads the active profile rather than importing a single global catalog, so
+// the same components serve every kind — and cross-project views (My tasks)
+// resolve each row from its own project's profile.
 
 import {
   PUBLICATIONS,
   PUBLICATION_CATEGORIES,
+  BRAND_THUMBNAILS,
   type Publication,
 } from "./publications";
 import { PRODUCTS, PRODUCT_CATEGORY } from "./products";
+import { CLIENTS, CLIENT_CATEGORY } from "./clients";
 import {
   MARKETING_TASK_TYPES,
   PRODUCT_TASK_TYPES,
+  REKLAAM_TASK_TYPES,
+  EVENTS_TASK_TYPES,
+  EDITORIAL_TASK_TYPES,
   type TaskTypeEntry,
 } from "./taskTypes";
 
-export type ProjectKind = "marketing" | "product";
+export type ProjectKind =
+  | "marketing"
+  | "product"
+  | "reklaam"
+  | "events"
+  | "editorial";
 
 export type CatalogProfile = {
-  /** Singular UI label for the brand/product field: "Brand" | "Product". */
+  /** Singular UI label for the item field: "Brand" | "Product" | "Klient". */
   itemLabel: string;
+  /** Plural form for "Filter …" / "No … match"; defaults to itemLabel + "s". */
+  itemLabelPlural?: string;
   items: Publication[];
   /** Group order. <= 1 entry => the picker renders a flat list (no headers). */
   categories: string[];
   taskTypes: TaskTypeEntry[];
 };
+
+/** Plural label for a profile (Estonian labels carry their own plural). */
+export function pluralLabel(profile: CatalogProfile): string {
+  return profile.itemLabelPlural ?? `${profile.itemLabel}s`;
+}
+
+// Events / editorial reuse the Delfi brand SVGs (by slug) with a curated
+// subset and their own display names. `brand()` looks the icon up by slug.
+function brand(slug: string, name: string): Publication {
+  return { slug, name, category: "Brand", thumbnail: BRAND_THUMBNAILS[slug] };
+}
+
+const EVENTS_BRANDS: Publication[] = [
+  brand("delfi", "Delfi"),
+  brand("kroonika", "Kroonika"),
+  brand("arileht", "Ärileht"),
+  brand("arvamus", "Arvamus"),
+  brand("delfitv", "Delfi TV"),
+  brand("omamaitse", "Oma Maitse"),
+  brand("maakodu", "Maakodu"),
+  brand("ilmateade", "Ilmateade"),
+  brand("lood", "Delfi Lood"),
+  brand("delfisport", "Sport"),
+  brand("kultuur", "Kultuur"),
+  brand("rusdelfi", "RusDelfi"),
+  brand("tasku", "Delfi Tasku"),
+  brand("forte", "Forte"),
+  brand("lp", "LP"),
+  brand("eestinaine", "Eesti Naine"),
+  brand("perejakodu", "Pere ja Kodu"),
+  brand("annestiil", "Anne & Stiil"),
+  brand("tervispluss", "Tervis Pluss"),
+  brand("moodnekodu", "Moodne Kodu"),
+  brand("eestiekspress", "Eesti Ekspress"),
+  brand("maaleht", "Maaleht"),
+  brand("geenius", "Geenius"),
+  brand("ekkk", "EKKK"),
+  brand("piletitasku", "Piletitasku"),
+];
+
+// Editorial = the same set minus EKKK and Piletitasku.
+const EDITORIAL_BRANDS: Publication[] = EVENTS_BRANDS.filter(
+  (b) => b.slug !== "ekkk" && b.slug !== "piletitasku"
+);
 
 export const MARKETING_PROFILE: CatalogProfile = {
   itemLabel: "Brand",
@@ -45,8 +101,41 @@ export const PRODUCT_PROFILE: CatalogProfile = {
   taskTypes: PRODUCT_TASK_TYPES,
 };
 
+export const REKLAAM_PROFILE: CatalogProfile = {
+  itemLabel: "Klient",
+  itemLabelPlural: "Kliendid",
+  items: CLIENTS,
+  categories: [],
+  taskTypes: REKLAAM_TASK_TYPES,
+};
+
+export const EVENTS_PROFILE: CatalogProfile = {
+  itemLabel: "Brand",
+  items: EVENTS_BRANDS,
+  categories: [],
+  taskTypes: EVENTS_TASK_TYPES,
+};
+
+export const EDITORIAL_PROFILE: CatalogProfile = {
+  itemLabel: "Brand",
+  items: EDITORIAL_BRANDS,
+  categories: [],
+  taskTypes: EDITORIAL_TASK_TYPES,
+};
+
 export function getProfile(kind: string | null | undefined): CatalogProfile {
-  return kind === "product" ? PRODUCT_PROFILE : MARKETING_PROFILE;
+  switch (kind) {
+    case "product":
+      return PRODUCT_PROFILE;
+    case "reklaam":
+      return REKLAAM_PROFILE;
+    case "events":
+      return EVENTS_PROFILE;
+    case "editorial":
+      return EDITORIAL_PROFILE;
+    default:
+      return MARKETING_PROFILE;
+  }
 }
 
 function dedupeItems(items: Publication[]): Publication[] {
@@ -72,16 +161,23 @@ function dedupeTypes(types: TaskTypeEntry[]): TaskTypeEntry[] {
 }
 
 // Union of all kinds, for the cross-project "My tasks" view where rows come
-// from projects of either kind. Used only for that view's column header,
-// filters and sort index — each row's icon/label still resolves from its
-// own project's profile. On a slug collision (e.g. "delfi" exists in both),
-// the brand entry wins; this only affects which icon a filter row shows,
-// never a task row.
+// from projects of any kind. Used only for that view's column header,
+// filters and sort index — each row's icon/label still resolves from its own
+// project's profile. Events/editorial reuse brand slugs already in
+// PUBLICATIONS, so only PRODUCTS + CLIENTS add new items here. On a slug
+// collision the brand entry wins; that only affects which icon a filter row
+// shows, never a task row.
 export const MERGED_PROFILE: CatalogProfile = {
   itemLabel: "Brand",
-  items: dedupeItems([...PUBLICATIONS, ...PRODUCTS]),
-  categories: [...PUBLICATION_CATEGORIES, PRODUCT_CATEGORY],
-  taskTypes: dedupeTypes([...MARKETING_TASK_TYPES, ...PRODUCT_TASK_TYPES]),
+  items: dedupeItems([...PUBLICATIONS, ...PRODUCTS, ...CLIENTS]),
+  categories: [...PUBLICATION_CATEGORIES, PRODUCT_CATEGORY, CLIENT_CATEGORY],
+  taskTypes: dedupeTypes([
+    ...MARKETING_TASK_TYPES,
+    ...PRODUCT_TASK_TYPES,
+    ...REKLAAM_TASK_TYPES,
+    ...EVENTS_TASK_TYPES,
+    ...EDITORIAL_TASK_TYPES,
+  ]),
 };
 
 export function catalogItem(

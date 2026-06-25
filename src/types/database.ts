@@ -85,7 +85,7 @@ export type Database = {
           color: string;
           position: number;
           archived: boolean;
-          kind: "marketing" | "product";
+          kind: "marketing" | "product" | "reklaam" | "events" | "editorial";
           created_at: string;
         };
         Insert: {
@@ -95,7 +95,7 @@ export type Database = {
           color?: string;
           position?: number;
           archived?: boolean;
-          kind?: "marketing" | "product";
+          kind?: "marketing" | "product" | "reklaam" | "events" | "editorial";
           created_at?: string;
         };
         Update: {
@@ -105,7 +105,7 @@ export type Database = {
           color?: string;
           position?: number;
           archived?: boolean;
-          kind?: "marketing" | "product";
+          kind?: "marketing" | "product" | "reklaam" | "events" | "editorial";
           created_at?: string;
         };
         Relationships: [];

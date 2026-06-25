@@ -37,6 +37,7 @@ import type { Profile, TaskPriority } from "@/types/database";
 import { PRIORITIES } from "./priority";
 import { groupItems, type CatalogProfile } from "./catalog";
 import { useCatalog } from "./CatalogProvider";
+import { BrandThumb } from "./BrandThumb";
 import {
   COLUMN_LABELS,
   COLUMN_MIN_WIDTHS,
@@ -726,11 +727,7 @@ function PublicationFilter({
                 checked={selected?.has(p.slug) ?? false}
                 onToggle={() => toggle(p.slug)}
                 leading={
-                  <img
-                    src={p.thumbnail}
-                    alt=""
-                    className="h-5 w-5 rounded object-cover shrink-0"
-                  />
+                  <BrandThumb thumbnail={p.thumbnail} className="h-5 w-5 rounded" />
                 }
               />
             ))}
