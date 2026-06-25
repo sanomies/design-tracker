@@ -115,6 +115,7 @@ export function useCreateProject(workspaceId: string | undefined) {
         name: values.name,
         color: values.color,
         position: Date.now(),
+        archived: false,
         created_at: new Date().toISOString(),
       };
       qc.setQueryData<Project[]>(projectsKey(workspaceId), (old = []) => [...old, optimistic]);
@@ -136,7 +137,7 @@ export function useCreateProject(workspaceId: string | undefined) {
 
 type UpdateInput = {
   id: string;
-  patch: { name?: string; color?: string };
+  patch: { name?: string; color?: string; archived?: boolean };
 };
 
 /**

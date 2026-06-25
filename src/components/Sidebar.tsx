@@ -40,6 +40,7 @@ import { MembersDialog } from "@/features/workspaces/MembersDialog";
 import { useWorkspace, useWorkspaces } from "@/features/workspaces/useWorkspace";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { cn } from "@/lib/utils";
+import type { Project } from "@/types/database";
 
 export function Sidebar() {
   const { data: workspace, isLoading: workspaceLoading } = useWorkspace();
@@ -148,7 +149,7 @@ export function WorkspaceSwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className="w-full flex items-center gap-2 rounded-lg p-2 hover:bg-[#EDF2F4] text-left transition-colors"
+          className="w-full flex items-center gap-2 rounded-lg p-2 hover:bg-[#EDF2F4] active:bg-[#EDF2F4] text-left transition-colors"
           aria-label="Switch workspace"
         >
           <span className="text-sm font-medium truncate flex-1" title={currentName}>
@@ -190,8 +191,115 @@ export function WorkspaceSwitcher({
 export function ProjectsSection({ workspaceId }: { workspaceId: string | undefined }) {
   const { data: projects, isLoading } = useProjects(workspaceId);
   const unseen = useUnseenProjects();
-  const reorderProject = useReorderProject(workspaceId);
   const [newOpen, setNewOpen] = useState(false);
+  // ARCHIVE is a collapsible group — default-open so the first time it
+  // appears the user can see what landed in it. The section only renders
+  // at all once at least one project is archived.
+  const [archiveOpen, setArchiveOpen] = useState(true);
+
+  // `archived` reads as undefined on rows fetched before the 0037
+  // migration has been applied — treat missing as not-archived so the
+  // full list still shows rather than silently emptying the sidebar.
+  const active = (projects ?? []).filter((p) => !p.archived);
+  const archived = (projects ?? []).filter((p) => p.archived);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between px-2 py-2">
+          <span className="text-xs font-semibold text-foreground">
+            PROJECTS
+          </span>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 -mr-1"
+            aria-label="New project"
+            onClick={() => setNewOpen(true)}
+            disabled={!workspaceId}
+          >
+            <IconPlus className="h-6 w-6" />
+          </Button>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-1 px-1">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-4/5" />
+            <Skeleton className="h-8 w-3/5" />
+          </div>
+        ) : active.length > 0 ? (
+          <SortableProjectList
+            projects={active}
+            workspaceId={workspaceId}
+            unseen={unseen}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setNewOpen(true)}
+            className="w-full text-left px-2 py-1.5 text-xs text-[#708597] hover:text-foreground transition-colors"
+          >
+            No projects yet. Create one →
+          </button>
+        )}
+      </div>
+
+      {/* ARCHIVE — mirrors the PROJECTS group but its header carries a
+          collapse chevron instead of the new-project plus. Only shown once
+          something's been archived. */}
+      {archived.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            onClick={() => setArchiveOpen((open) => !open)}
+            aria-expanded={archiveOpen}
+            className="flex w-full items-center justify-between gap-2 px-2 py-2 text-left"
+          >
+            <span className="text-xs font-semibold text-foreground">
+              ARCHIVE
+            </span>
+            <IconChevronDown
+              className={cn(
+                "h-[18px] w-[18px] text-foreground transition-transform",
+                !archiveOpen && "-rotate-90"
+              )}
+            />
+          </button>
+
+          {archiveOpen && (
+            <SortableProjectList
+              projects={archived}
+              workspaceId={workspaceId}
+              unseen={unseen}
+            />
+          )}
+        </div>
+      )}
+
+      <NewProjectDialog open={newOpen} onOpenChange={setNewOpen} workspaceId={workspaceId} />
+    </div>
+  );
+}
+
+/**
+ * A drag-reorderable list of project rows. Rendered once for the active
+ * PROJECTS list and once for ARCHIVE, each in its own DndContext so a
+ * drag stays within its own group. Reorder positions share a single
+ * workspace-wide `position` space, but since each list is filtered then
+ * sorted by position independently, interpolating between neighbours in
+ * one list never disturbs the other.
+ */
+function SortableProjectList({
+  projects,
+  workspaceId,
+  unseen,
+}: {
+  projects: Project[];
+  workspaceId: string | undefined;
+  unseen: Set<string>;
+}) {
+  const reorderProject = useReorderProject(workspaceId);
 
   // 8px activation distance so a click on a project row navigates as
   // usual — only a deliberate vertical drag starts a reorder.
@@ -201,7 +309,7 @@ export function ProjectsSection({ workspaceId }: { workspaceId: string | undefin
 
   const onDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
-    if (!over || active.id === over.id || !projects) return;
+    if (!over || active.id === over.id) return;
 
     const oldIdx = projects.findIndex((p) => p.id === active.id);
     const newIdxAmongAll = projects.findIndex((p) => p.id === over.id);
@@ -237,63 +345,27 @@ export function ProjectsSection({ workspaceId }: { workspaceId: string | undefin
   };
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between px-2 py-2">
-        <span className="text-xs font-semibold text-foreground">
-          PROJECTS
-        </span>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6 -mr-1"
-          aria-label="New project"
-          onClick={() => setNewOpen(true)}
-          disabled={!workspaceId}
-        >
-          <IconPlus className="h-6 w-6" />
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <div className="space-y-1 px-1">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-4/5" />
-          <Skeleton className="h-8 w-3/5" />
+    // Project rows are flush per Figma — no inter-row gap.
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={onDragEnd}
+    >
+      <SortableContext
+        items={projects.map((p) => p.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div>
+          {projects.map((project) => (
+            <ProjectRow
+              key={project.id}
+              project={project}
+              hasUnseen={unseen.has(project.id)}
+            />
+          ))}
         </div>
-      ) : projects && projects.length > 0 ? (
-        // Project rows are flush per Figma — no inter-row gap.
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={onDragEnd}
-        >
-          <SortableContext
-            items={projects.map((p) => p.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            <div>
-              {projects.map((project) => (
-                <ProjectRow
-                  key={project.id}
-                  project={project}
-                  hasUnseen={unseen.has(project.id)}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setNewOpen(true)}
-          className="w-full text-left px-2 py-1.5 text-xs text-[#708597] hover:text-foreground transition-colors"
-        >
-          No projects yet. Create one →
-        </button>
-      )}
-
-      <NewProjectDialog open={newOpen} onOpenChange={setNewOpen} workspaceId={workspaceId} />
-    </div>
+      </SortableContext>
+    </DndContext>
   );
 }
 
@@ -312,7 +384,7 @@ export function UserMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className="w-full flex items-center gap-2 rounded-lg p-2 hover:bg-[#EDF2F4] text-left transition-colors"
+          className="w-full flex items-center gap-2 rounded-lg p-2 hover:bg-[#EDF2F4] active:bg-[#EDF2F4] text-left transition-colors"
           aria-label="Account menu"
         >
           <Avatar className="h-9 w-9 shrink-0">

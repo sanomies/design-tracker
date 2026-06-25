@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useHasHover } from "@/hooks/useHasHover";
 import type { Project } from "@/types/database";
 
 import { projectInitial, resolveProjectColor } from "./colors";
@@ -86,6 +87,10 @@ export function ProjectRow({
   const isActive = !!match;
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // On touch / coarse-pointer devices there is no hover, so the actions
+  // button can't rely on `group-hover` to reveal itself — show it
+  // permanently there. On mouse/trackpad it stays hidden until row hover.
+  const hasHover = useHasHover();
 
   // Whole-row drag activator with an 8px activation distance, so a
   // quick click still navigates and only a deliberate drag starts a
@@ -141,7 +146,7 @@ export function ProjectRow({
           // rows stay medium so the active row visually pops.
           isActive
             ? "bg-[#EDF2F4] text-foreground font-semibold"
-            : "hover:bg-[#EDF2F4]/60 text-foreground font-medium",
+            : "hover:bg-[#EDF2F4]/60 active:bg-[#EDF2F4]/60 text-foreground font-medium",
           // Pointer for the rest state (this is a link); only switch
           // to the grabbing-hand cursor once dnd-kit is actively
           // dragging the row, since at rest there's no visible
@@ -174,7 +179,10 @@ export function ProjectRow({
             // bubble up to the row otherwise and starting an 8px drag
             // from the button steals the click.
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 opacity-0 focus:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+            className={cn(
+              "absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 focus:opacity-100 data-[state=open]:opacity-100",
+              hasHover ? "opacity-0 group-hover:opacity-100" : "opacity-100"
+            )}
             aria-label={`Actions for ${project.name}`}
             onClick={(e) => e.preventDefault()}
           >
