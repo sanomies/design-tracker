@@ -25,3 +25,26 @@ export const PRODUCT_TASK_TYPES: TaskTypeEntry[] = [
   { slug: "disainisusteem",     name: "Disainisüsteem" },
   { slug: "embed-integratsioon", name: "Embed / integratsioon" },
 ];
+
+// `reklaam` projects (advertising — tagged by client, not brand).
+export const REKLAAM_TASK_TYPES: TaskTypeEntry[] = [
+  { slug: "standardbanner", name: "Standardbänner" },
+  { slug: "erilahendus",    name: "Erilahendus" },
+  { slug: "erileht",        name: "Erileht" },
+  { slug: "sisuturundus",   name: "Sisuturundus (ST)" },
+  { slug: "muudatus",       name: "Muudatus" },
+];
+
+// `events` projects (Üritused).
+export const EVENTS_TASK_TYPES: TaskTypeEntry[] = [
+  { slug: "oma-uritus",    name: "Oma üritus" },
+  { slug: "siseuritus",    name: "Siseüritus" },
+  { slug: "partneruritus", name: "Partnerüritus" },
+];
+
+// `editorial` projects (Toimetuse projektid).
+export const EDITORIAL_TASK_TYPES: TaskTypeEntry[] = [
+  { slug: "erikeskkond",     name: "Erikeskkond" },
+  { slug: "saade-podcast",   name: "Saade/Podcast" },
+  { slug: "pusivisuaalid",   name: "Püsivisuaalid" },
+];

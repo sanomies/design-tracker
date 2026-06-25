@@ -67,6 +67,7 @@ import { PRIORITIES, priorityMeta } from "./priority";
 import { PublicationPickerContent } from "./PublicationPicker";
 import { catalogItem, catalogType } from "./catalog";
 import { useCatalog } from "./CatalogProvider";
+import { BrandThumb } from "./BrandThumb";
 import { TypePickerContent } from "./TypePicker";
 import {
   useTasks,
@@ -654,11 +655,7 @@ function PublicationInline({
         <button type="button" className={PROPERTY_TRIGGER_CLASS}>
           {current ? (
             <>
-              <img
-                src={current.thumbnail}
-                alt=""
-                className="h-6 w-6 rounded object-cover shrink-0"
-              />
+              <BrandThumb thumbnail={current.thumbnail} className="h-6 w-6 rounded" />
               <span className="truncate">{current.name}</span>
             </>
           ) : (

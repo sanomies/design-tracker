@@ -19,6 +19,7 @@ import { PriorityPickerContent } from "./PriorityPicker";
 import { PublicationPickerContent } from "./PublicationPicker";
 import { catalogItem, catalogType } from "./catalog";
 import { useCatalog } from "./CatalogProvider";
+import { BrandThumb } from "./BrandThumb";
 import { TypePickerContent } from "./TypePicker";
 import {
   effectiveColumnWidth,
@@ -183,11 +184,7 @@ export function TaskRow({
               >
                 {publication ? (
                   <>
-                    <img
-                      src={publication.thumbnail}
-                      alt=""
-                      className="h-6 w-6 rounded object-cover shrink-0"
-                    />
+                    <BrandThumb thumbnail={publication.thumbnail} className="h-6 w-6 rounded" />
                     <span className="text-xs truncate">{publication.name}</span>
                   </>
                 ) : (

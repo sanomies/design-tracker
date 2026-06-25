@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-import { catalogItem, groupItems, type CatalogProfile } from "./catalog";
+import { catalogItem, groupItems, pluralLabel, type CatalogProfile } from "./catalog";
 import { useCatalog } from "./CatalogProvider";
+import { BrandThumb } from "./BrandThumb";
 import { type Publication } from "./publications";
 
 type FlatItem =
@@ -35,6 +36,7 @@ export function PublicationPickerContent({
 }) {
   const profile = useCatalog();
   const label = profile.itemLabel.toLowerCase();
+  const plural = pluralLabel(profile).toLowerCase();
 
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
@@ -129,7 +131,7 @@ export function PublicationPickerContent({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKeyDown}
-        aria-label={`Filter ${label}s`}
+        aria-label={`Filter ${plural}`}
         className="sr-only"
       />
       {q !== "" && (
@@ -139,7 +141,7 @@ export function PublicationPickerContent({
       )}
       {flatItems.length === 0 && (
         <div className="px-2 py-3 text-sm text-muted-foreground text-center">
-          No {label}s match
+          No {plural} match
         </div>
       )}
       {q === "" &&
@@ -188,11 +190,7 @@ export function PublicationPickerContent({
                 onMouseEnter={() => setActiveIdx(itemIdx)}
                 onClick={() => commit(p.slug)}
               >
-                <img
-                  src={p.thumbnail}
-                  alt=""
-                  className="h-5 w-5 rounded object-cover shrink-0"
-                />
+                <BrandThumb thumbnail={p.thumbnail} className="h-5 w-5 rounded" />
                 <span className="truncate">{p.name}</span>
               </button>
             );
@@ -242,15 +240,7 @@ export function PublicationPicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="w-full justify-start font-normal gap-1.5">
-          {current ? (
-            <img
-              src={current.thumbnail}
-              alt=""
-              className="h-5 w-5 rounded object-cover shrink-0"
-            />
-          ) : (
-            <span className="h-5 w-5 rounded bg-muted shrink-0" aria-hidden />
-          )}
+          <BrandThumb thumbnail={current?.thumbnail} className="h-5 w-5 rounded" />
           <span className="truncate">
             {current ? current.name : `No ${profile.itemLabel.toLowerCase()}`}
           </span>
