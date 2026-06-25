@@ -1,12 +1,15 @@
 import { cn } from "@/lib/utils";
 
-import { TASK_TYPES } from "./taskTypes";
+import { useCatalog } from "./CatalogProvider";
 
 /**
  * Popover content for choosing a task type. Simpler than the publication
  * picker — the type catalog has a handful of entries so no type-ahead /
  * keyboard nav is needed. Mirrors the visual treatment used in the
  * assignee + priority cells: "Clear" row first, then a flat list.
+ *
+ * The type set comes from the active CatalogProfile in context, so a
+ * project's kind decides which types are offered.
  *
  * Callers wrap this in a Popover (full-width trigger in the detail panel,
  * compact cell trigger in a list row) — no built-in trigger here.
@@ -20,6 +23,7 @@ export function TypePickerContent({
   onChange: (slug: string | null) => void;
   onClose: () => void;
 }) {
+  const { taskTypes } = useCatalog();
   const commit = (slug: string | null) => {
     onChange(slug);
     onClose();
@@ -37,7 +41,7 @@ export function TypePickerContent({
       >
         No type
       </button>
-      {TASK_TYPES.map((t) => (
+      {taskTypes.map((t) => (
         <button
           key={t.slug}
           type="button"

@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ProjectLetterPill } from "@/features/projects/ProjectRow";
 import { useProjects } from "@/features/projects/useProjects";
 import { useMarkProjectSeen } from "@/features/projects/useUnseenProjects";
+import { CatalogProvider } from "@/features/tasks/CatalogProvider";
 import { MobileTaskList } from "@/features/tasks/MobileTaskList";
 import { TaskDetailPanel } from "@/features/tasks/TaskDetailPanel";
 import { MobileTaskOverlay } from "@/features/tasks/MobileTaskOverlay";
@@ -106,6 +107,7 @@ export default function ProjectView() {
   if (!projectId) return null;
 
   return (
+    <CatalogProvider kind={project?.kind}>
     <div className="relative h-full flex">
       <section className="flex-1 min-w-0 flex flex-col">
         {/* Header + action row are visually one block in the Figma —
@@ -256,5 +258,6 @@ export default function ProjectView() {
         </div>
       )}
     </div>
+    </CatalogProvider>
   );
 }

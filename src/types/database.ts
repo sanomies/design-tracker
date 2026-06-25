@@ -85,6 +85,7 @@ export type Database = {
           color: string;
           position: number;
           archived: boolean;
+          kind: "marketing" | "product";
           created_at: string;
         };
         Insert: {
@@ -94,6 +95,7 @@ export type Database = {
           color?: string;
           position?: number;
           archived?: boolean;
+          kind?: "marketing" | "product";
           created_at?: string;
         };
         Update: {
@@ -103,6 +105,7 @@ export type Database = {
           color?: string;
           position?: number;
           archived?: boolean;
+          kind?: "marketing" | "product";
           created_at?: string;
         };
         Relationships: [];

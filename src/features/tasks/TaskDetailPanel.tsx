@@ -65,9 +65,9 @@ import type { Profile, Task, TaskPriority } from "@/types/database";
 
 import { PRIORITIES, priorityMeta } from "./priority";
 import { PublicationPickerContent } from "./PublicationPicker";
-import { getPublication } from "./publications";
+import { catalogItem, catalogType } from "./catalog";
+import { useCatalog } from "./CatalogProvider";
 import { TypePickerContent } from "./TypePicker";
-import { getTaskType } from "./taskTypes";
 import {
   useTasks,
   useUndoableDeleteTask,
@@ -127,6 +127,7 @@ function PanelBody({
   onToggleFullscreen,
 }: DetailPanelProps) {
   const isMobile = useIsMobile();
+  const catalog = useCatalog();
   const updateTask = useUpdateTask(task.project_id);
   // Delete + title rename both go through the undoable helpers so the
   // user gets a 6s "Undo" toast for each (deferred delete; immediate
@@ -299,7 +300,7 @@ function PanelBody({
             <div className="grid grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-0">
               <div className="min-w-0 divide-y divide-[#DEDFE0]">
                 <PropertyRow
-                  label="Brand"
+                  label={catalog.itemLabel}
                   compact={isMobile}
                   icon={
                     isMobile ? (
@@ -644,7 +645,8 @@ function PublicationInline({
   onChange: (slug: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const current = getPublication(value);
+  const catalog = useCatalog();
+  const current = catalogItem(catalog, value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -685,7 +687,8 @@ function TypeInline({
   onChange: (slug: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const current = getTaskType(value);
+  const catalog = useCatalog();
+  const current = catalogType(catalog, value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

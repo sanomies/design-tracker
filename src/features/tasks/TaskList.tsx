@@ -50,6 +50,7 @@ import { TaskListHeader } from "./TaskListHeader";
 import { defaultFilters, matchesFilters, type Filters } from "./taskFilters";
 import { type SortState } from "./taskColumns";
 import { buildSortComparator } from "./taskSort";
+import { useCatalog } from "./CatalogProvider";
 import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
 import { SortableTaskRow } from "@/features/tasks/SortableTaskRow";
 import {
@@ -99,6 +100,7 @@ export function TaskList({
 }) {
   const { data: tasks, isLoading } = useTasks(projectId);
   const { data: sections = [] } = useSections(projectId);
+  const catalog = useCatalog();
   const createTask = useCreateTask(projectId);
   const updateTask = useUpdateTask(projectId);
   // Task delete uses the undoable variant: 6s toast with Undo button,
@@ -174,12 +176,12 @@ export function TaskList({
         us.push(t);
       }
     }
-    const sortCmp = buildSortComparator(sort, members);
+    const sortCmp = buildSortComparator(sort, members, catalog);
     const finalCmp = sortCmp ?? ((a: Task, b: Task) => a.position - b.position);
     us.sort(finalCmp);
     for (const arr of by.values()) arr.sort(finalCmp);
     return { unsectioned: us, bySection: by };
-  }, [openTasks, sort, members]);
+  }, [openTasks, sort, members, catalog]);
 
   // Sort
   const [doneSort, setDoneSort] = useState<DoneSort>(() => {

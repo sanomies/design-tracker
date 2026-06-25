@@ -67,7 +67,7 @@ export function useProject(projectId: string | undefined) {
 
 // Create ----------------------------------------------------------------
 
-type CreateInput = { name: string; color: string };
+type CreateInput = { name: string; color: string; kind: Project["kind"] };
 
 export function useCreateProject(workspaceId: string | undefined) {
   const qc = useQueryClient();
@@ -84,6 +84,7 @@ export function useCreateProject(workspaceId: string | undefined) {
           workspace_id: workspaceId,
           name: values.name,
           color: values.color,
+          kind: values.kind,
           position,
         })
         .select()
@@ -116,6 +117,7 @@ export function useCreateProject(workspaceId: string | undefined) {
         color: values.color,
         position: Date.now(),
         archived: false,
+        kind: values.kind,
         created_at: new Date().toISOString(),
       };
       qc.setQueryData<Project[]>(projectsKey(workspaceId), (old = []) => [...old, optimistic]);
@@ -137,7 +139,7 @@ export function useCreateProject(workspaceId: string | undefined) {
 
 type UpdateInput = {
   id: string;
-  patch: { name?: string; color?: string; archived?: boolean };
+  patch: { name?: string; color?: string; archived?: boolean; kind?: Project["kind"] };
 };
 
 /**

@@ -35,8 +35,8 @@ import { cn } from "@/lib/utils";
 import type { Profile, TaskPriority } from "@/types/database";
 
 import { PRIORITIES } from "./priority";
-import { PUBLICATIONS, PUBLICATION_CATEGORIES } from "./publications";
-import { TASK_TYPES } from "./taskTypes";
+import { groupItems, type CatalogProfile } from "./catalog";
+import { useCatalog } from "./CatalogProvider";
 import {
   COLUMN_LABELS,
   COLUMN_MIN_WIDTHS,
@@ -72,6 +72,7 @@ export function TaskListHeader({
   onSortChange,
 }: Props) {
   const { data: members = [] } = useWorkspaceMembers(workspaceId);
+  const catalog = useCatalog();
   const order = useColumnOrder();
   const hidden = useHiddenColumns();
   // Only the columns the user has chosen to show — preserves the user's
@@ -138,7 +139,7 @@ export function TaskListHeader({
           <div className="shrink-0 flex items-stretch -my-2">
             {visibleOrder.map((id) => (
               <SortableColumn key={id} id={id}>
-                {renderHeaderCell(id, filters, onChange, members, sort, onSortChange)}
+                {renderHeaderCell(id, filters, onChange, members, sort, onSortChange, catalog)}
               </SortableColumn>
             ))}
           </div>
@@ -179,7 +180,7 @@ export function TaskListHeader({
               // user can flip several columns in one open.
               onSelect={(e) => e.preventDefault()}
             >
-              {COLUMN_LABELS[id]}
+              {id === "publication" ? catalog.itemLabel : COLUMN_LABELS[id]}
             </DropdownMenuCheckboxItem>
           ))}
         </DropdownMenuContent>
@@ -194,7 +195,8 @@ function renderHeaderCell(
   onChange: (f: Filters) => void,
   members: Profile[],
   sort: SortState,
-  onSortChange: (next: SortState) => void
+  onSortChange: (next: SortState) => void,
+  catalog: CatalogProfile
 ): ReactNode {
   const sortDirection: "asc" | "desc" | null =
     sort && sort.column === id ? sort.direction : null;
@@ -204,12 +206,13 @@ function renderHeaderCell(
     case "publication":
       return (
         <ColumnHeader
-          label={COLUMN_LABELS.publication}
+          label={catalog.itemLabel}
           active={filters.publication !== null}
           sortDirection={sortDirection}
           onSortClick={handleSort}
         >
           <PublicationFilter
+            profile={catalog}
             selected={filters.publication}
             onChange={(next) => onChange({ ...filters, publication: next })}
           />
@@ -297,6 +300,7 @@ function renderHeaderCell(
           onSortClick={handleSort}
         >
           <TypeFilter
+            profile={catalog}
             selected={filters.type}
             onChange={(next) => onChange({ ...filters, type: next })}
           />
@@ -308,9 +312,11 @@ function renderHeaderCell(
 // --- Task-type multi-select filter -----------------------------------
 
 function TypeFilter({
+  profile,
   selected,
   onChange,
 }: {
+  profile: CatalogProfile;
   selected: Set<string | null> | null;
   onChange: (next: Set<string | null> | null) => void;
 }) {
@@ -340,7 +346,7 @@ function TypeFilter({
         checked={selected?.has(null) ?? false}
         onToggle={() => toggle(null)}
       />
-      {TASK_TYPES.map((t) => (
+      {profile.taskTypes.map((t) => (
         <FilterRow
           key={t.slug}
           label={t.name}
@@ -667,12 +673,15 @@ function PriorityFilter({
 // --- Publication multi-select filter ---------------------------------
 
 function PublicationFilter({
+  profile,
   selected,
   onChange,
 }: {
+  profile: CatalogProfile;
   selected: Set<string | null> | null;
   onChange: (next: Set<string | null> | null) => void;
 }) {
+  const label = profile.itemLabel.toLowerCase();
   const toggle = (slug: string | null) => {
     const next = new Set(selected ?? []);
     if (next.has(slug)) next.delete(slug);
@@ -691,44 +700,42 @@ function PublicationFilter({
         )}
       >
         <span className="w-3.5" />
-        Any brand
+        Any {label}
       </button>
       <div className="h-px bg-border my-1" />
       <div className="max-h-64 overflow-y-auto">
         <FilterRow
-          label="No brand"
+          label={`No ${label}`}
           checked={selected?.has(null) ?? false}
           onToggle={() => toggle(null)}
           leading={
             <span className="h-5 w-5 rounded bg-muted shrink-0" aria-hidden />
           }
         />
-        {PUBLICATION_CATEGORIES.map((category) => {
-          const items = PUBLICATIONS.filter((p) => p.category === category);
-          if (items.length === 0) return null;
-          return (
-            <div key={category}>
+        {groupItems(profile, profile.items).map((group, gi) => (
+          <div key={group.category ?? `g${gi}`}>
+            {group.category !== null && (
               <div className="px-2 pt-2 pb-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                {category}
+                {group.category}
               </div>
-              {items.map((p) => (
-                <FilterRow
-                  key={p.slug}
-                  label={p.name}
-                  checked={selected?.has(p.slug) ?? false}
-                  onToggle={() => toggle(p.slug)}
-                  leading={
-                    <img
-                      src={p.thumbnail}
-                      alt=""
-                      className="h-5 w-5 rounded object-cover shrink-0"
-                    />
-                  }
-                />
-              ))}
-            </div>
-          );
-        })}
+            )}
+            {group.items.map((p) => (
+              <FilterRow
+                key={p.slug}
+                label={p.name}
+                checked={selected?.has(p.slug) ?? false}
+                onToggle={() => toggle(p.slug)}
+                leading={
+                  <img
+                    src={p.thumbnail}
+                    alt=""
+                    className="h-5 w-5 rounded object-cover shrink-0"
+                  />
+                }
+              />
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );

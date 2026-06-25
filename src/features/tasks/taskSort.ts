@@ -1,16 +1,18 @@
 import type { Profile, Task } from "@/types/database";
 
-import { PUBLICATIONS } from "./publications";
+import type { CatalogProfile } from "./catalog";
 import type { SortState } from "./taskColumns";
-import { TASK_TYPES } from "./taskTypes";
 
 // Build a comparator from the active sort state. Returns null when no
 // sort is set — caller falls back to position-based ordering. Nulls /
 // empty values always sort to the bottom regardless of direction so the
-// user always sees populated rows first.
+// user always sees populated rows first. Brand/type ordering follows the
+// active catalog profile (a project's kind, or the merged profile for the
+// cross-project My-tasks view).
 export function buildSortComparator(
   sort: SortState,
-  members: Profile[]
+  members: Profile[],
+  catalog: CatalogProfile
 ): ((a: Task, b: Task) => number) | null {
   if (!sort) return null;
   const { column, direction } = sort;
@@ -21,9 +23,9 @@ export function buildSortComparator(
     memberName.set(m.id, (m.full_name ?? "").toLowerCase());
   }
   const pubIndex = new Map<string, number>();
-  PUBLICATIONS.forEach((p, i) => pubIndex.set(p.slug, i));
+  catalog.items.forEach((p, i) => pubIndex.set(p.slug, i));
   const typeIndex = new Map<string, number>();
-  TASK_TYPES.forEach((t, i) => typeIndex.set(t.slug, i));
+  catalog.taskTypes.forEach((t, i) => typeIndex.set(t.slug, i));
 
   switch (column) {
     case "assignee":
@@ -72,8 +74,8 @@ export function buildSortComparator(
       // values); within known/unknown the slug catalog order wins.
       return (a, b) =>
         compareNullable(
-          a.type ? typeIndex.get(a.type) ?? TASK_TYPES.length : null,
-          b.type ? typeIndex.get(b.type) ?? TASK_TYPES.length : null,
+          a.type ? typeIndex.get(a.type) ?? catalog.taskTypes.length : null,
+          b.type ? typeIndex.get(b.type) ?? catalog.taskTypes.length : null,
           (x, y) => x - y,
           dir
         );

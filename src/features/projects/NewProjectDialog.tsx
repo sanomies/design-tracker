@@ -13,11 +13,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { Project } from "@/types/database";
 
 import {
   DEFAULT_PROJECT_COLOR_HEX,
   PROJECT_COLORS,
 } from "./colors";
+import { ProjectKindField } from "./ProjectKindField";
 import { useCreateProject } from "./useProjects";
 
 const NAME_MAX = 80;
@@ -38,6 +40,7 @@ export function NewProjectDialog({
   // colour picker isn't a native input and the form is two fields.
   const [name, setName] = useState("");
   const [color, setColor] = useState<string>(DEFAULT_PROJECT_COLOR_HEX);
+  const [kind, setKind] = useState<Project["kind"]>("marketing");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -46,6 +49,7 @@ export function NewProjectDialog({
     if (open) {
       setName("");
       setColor(DEFAULT_PROJECT_COLOR_HEX);
+      setKind("marketing");
       setError(null);
       setSubmitting(false);
     }
@@ -65,7 +69,7 @@ export function NewProjectDialog({
     setError(null);
     setSubmitting(true);
     try {
-      const project = await createProject.mutateAsync({ name: trimmed, color });
+      const project = await createProject.mutateAsync({ name: trimmed, color, kind });
       onOpenChange(false);
       if (!project.id.startsWith("temp-")) {
         navigate(`/projects/${project.id}`);
@@ -106,6 +110,8 @@ export function NewProjectDialog({
               presets={PROJECT_COLORS.map((c) => ({ value: c.hex, label: c.label }))}
             />
           </div>
+
+          <ProjectKindField value={kind} onChange={setKind} />
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
