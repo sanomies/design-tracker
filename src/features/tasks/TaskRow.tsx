@@ -17,9 +17,9 @@ import { DueDatePickerContent } from "./DueDatePicker";
 import { priorityMeta } from "./priority";
 import { PriorityPickerContent } from "./PriorityPicker";
 import { PublicationPickerContent } from "./PublicationPicker";
-import { getPublication } from "./publications";
+import { catalogItem, catalogType } from "./catalog";
+import { useCatalog } from "./CatalogProvider";
 import { TypePickerContent } from "./TypePicker";
-import { getTaskType } from "./taskTypes";
 import {
   effectiveColumnWidth,
   useColumnOrder,
@@ -81,8 +81,9 @@ export function TaskRow({
   const creator = members?.find((m) => m.id === task.created_by);
   const priority = priorityMeta(task.priority);
   const due = task.due_date ? formatDueDate(task.due_date) : null;
-  const publication = getPublication(task.publication);
-  const taskType = getTaskType(task.type);
+  const catalog = useCatalog();
+  const publication = catalogItem(catalog, task.publication);
+  const taskType = catalogType(catalog, task.type);
   const done = task.status === "done";
   const order = useColumnOrder();
   const hidden = useHiddenColumns();
@@ -175,8 +176,8 @@ export function TaskRow({
                 className="w-full flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-accent text-left transition-colors"
                 aria-label={
                   publication
-                    ? `Change publication (${publication.name})`
-                    : "Set publication"
+                    ? `Change ${catalog.itemLabel.toLowerCase()} (${publication.name})`
+                    : `Set ${catalog.itemLabel.toLowerCase()}`
                 }
                 title={publication?.name}
               >

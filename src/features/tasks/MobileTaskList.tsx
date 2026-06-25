@@ -35,8 +35,8 @@ import { cn } from "@/lib/utils";
 import type { MyTaskSection, Section, Task } from "@/types/database";
 
 import { TaskCheckbox } from "./TaskCheckbox";
-import { getPublication } from "./publications";
-import { getTaskType } from "./taskTypes";
+import { catalogItem, catalogType } from "./catalog";
+import { useCatalog } from "./CatalogProvider";
 import {
   useCreateTask,
   useTasks,
@@ -573,6 +573,7 @@ function MobileBoardBody({
   emptyHint: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const { itemLabel } = useCatalog();
   // Scroll width covers the sticky Name column + all metadata cells.
   const innerWidth = `calc(${NAME_MIN}px + ${COL_PUBLICATION + COL_ASSIGNEE + COL_TYPE + COL_DUE}px)`;
 
@@ -612,7 +613,7 @@ function MobileBoardBody({
             Name
           </HeaderCell>
           <HeaderCell width={COL_PUBLICATION} chevron>
-            Brand
+            {itemLabel}
           </HeaderCell>
           <HeaderCell width={COL_ASSIGNEE} chevron>
             Assignee
@@ -884,8 +885,9 @@ function MobileTaskRow({
   const undoableRenameTask = useUndoableRenameTask(task.project_id);
   const { data: members } = useWorkspaceMembers(workspaceId);
   const assignee = members?.find((m) => m.id === task.assignee_id);
-  const publication = getPublication(task.publication);
-  const taskType = getTaskType(task.type);
+  const catalog = useCatalog();
+  const publication = catalogItem(catalog, task.publication);
+  const taskType = catalogType(catalog, task.type);
   const due = task.due_date ? formatDueDate(task.due_date) : null;
   const done = task.status === "done";
 

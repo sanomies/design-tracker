@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import type { Project } from "@/types/database";
 
 import { PROJECT_COLORS, resolveProjectColor } from "./colors";
+import { ProjectKindField } from "./ProjectKindField";
 import { useUpdateProject } from "./useProjects";
 
 const NAME_MAX = 80;
@@ -38,6 +39,7 @@ export function EditProjectDialog({
 
   const [name, setName] = useState(project.name);
   const [color, setColor] = useState<string>(resolveProjectColor(project.color));
+  const [kind, setKind] = useState<Project["kind"]>(project.kind);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -48,10 +50,11 @@ export function EditProjectDialog({
     if (open) {
       setName(project.name);
       setColor(resolveProjectColor(project.color));
+      setKind(project.kind);
       setError(null);
       setSubmitting(false);
     }
-  }, [open, project.name, project.color]);
+  }, [open, project.name, project.color, project.kind]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,11 +70,12 @@ export function EditProjectDialog({
 
     // Build a minimal patch — skip fields that didn't change so the
     // optimistic update doesn't pretend to do work it doesn't need to.
-    const patch: { name?: string; color?: string } = {};
+    const patch: { name?: string; color?: string; kind?: Project["kind"] } = {};
     if (trimmed !== project.name) patch.name = trimmed;
     if (color.toUpperCase() !== resolveProjectColor(project.color).toUpperCase()) {
       patch.color = color;
     }
+    if (kind !== project.kind) patch.kind = kind;
     if (Object.keys(patch).length === 0) {
       onOpenChange(false);
       return;
@@ -136,6 +140,8 @@ export function EditProjectDialog({
               presets={PROJECT_COLORS.map((c) => ({ value: c.hex, label: c.label }))}
             />
           </div>
+
+          <ProjectKindField value={kind} onChange={setKind} />
 
           <DialogFooter>
             <Button

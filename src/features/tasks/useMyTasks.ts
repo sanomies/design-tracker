@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import type { Project, Task, TaskUpdate } from "@/types/database";
 
 export type MyTaskRow = Task & {
-  project: Pick<Project, "id" | "name" | "color" | "workspace_id"> | null;
+  project: Pick<Project, "id" | "name" | "color" | "workspace_id" | "kind"> | null;
 };
 
 const myTasksKey = (userId: string | undefined) => ["my-tasks", userId] as const;
@@ -30,7 +30,7 @@ export function useMyTasks() {
       if (!userId) return [];
       const { data, error } = await supabase
         .from("tasks")
-        .select("*, project:projects(id, name, color, workspace_id)")
+        .select("*, project:projects(id, name, color, workspace_id, kind)")
         .eq("assignee_id", userId)
         .order("position", { ascending: true })
         .order("created_at", { ascending: true });

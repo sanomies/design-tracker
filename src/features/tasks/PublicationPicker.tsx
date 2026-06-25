@@ -4,25 +4,25 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-import {
-  PUBLICATIONS,
-  PUBLICATION_CATEGORIES,
-  getPublication,
-  type Publication,
-} from "./publications";
+import { catalogItem, groupItems, type CatalogProfile } from "./catalog";
+import { useCatalog } from "./CatalogProvider";
+import { type Publication } from "./publications";
 
 type FlatItem =
   | { kind: "none"; slug: null }
   | { kind: "pub"; slug: string; publication: Publication };
 
 /**
- * Popover content for choosing a publication. Type-ahead: any printable
+ * Popover content for choosing a brand/product. Type-ahead: any printable
  * key narrows the list, arrow keys move the active highlight, Enter
  * commits, Esc closes. There is no visible search input — keystrokes are
  * captured on a hidden field that holds focus while the popover is open.
  *
- * The picker itself doesn't own a trigger — callers wrap it however they
- * want (full-width button in the detail panel, compact cell in a row).
+ * The catalog (items, grouping, "Brand" vs "Product" wording) comes from
+ * the active CatalogProfile in context, so the same picker serves every
+ * project kind. The picker itself doesn't own a trigger — callers wrap it
+ * however they want (full-width button in the detail panel, compact cell
+ * in a row).
  */
 export function PublicationPickerContent({
   value,
@@ -33,35 +33,39 @@ export function PublicationPickerContent({
   onChange: (slug: string | null) => void;
   onClose: () => void;
 }) {
+  const profile = useCatalog();
+  const label = profile.itemLabel.toLowerCase();
+
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
 
   const matches = useMemo(
     () =>
       q
-        ? PUBLICATIONS.filter((p) => p.name.toLowerCase().includes(q))
-        : PUBLICATIONS,
-    [q]
+        ? profile.items.filter((p) => p.name.toLowerCase().includes(q))
+        : profile.items,
+    [q, profile]
   );
 
-  // Flat list of selectable items in render order. Used to drive
-  // arrow-key navigation and resolve Enter to a slug.
+  const groups = useMemo(() => groupItems(profile, matches), [profile, matches]);
+
+  // Flat list of selectable items in render order. Drives arrow-key
+  // navigation and resolves Enter to a slug.
   const flatItems = useMemo<FlatItem[]>(() => {
     const items: FlatItem[] = [];
     if (q === "") items.push({ kind: "none", slug: null });
-    for (const category of PUBLICATION_CATEGORIES) {
-      for (const p of matches.filter((m) => m.category === category)) {
+    for (const group of groups) {
+      for (const p of group.items) {
         items.push({ kind: "pub", slug: p.slug, publication: p });
       }
     }
     return items;
-  }, [matches, q]);
+  }, [groups, q]);
 
   // Initial active = currently-selected value if visible, otherwise 0.
-  const [activeIdx, setActiveIdx] = useState(() => {
-    const i = computeInitialActive(value);
-    return i;
-  });
+  const [activeIdx, setActiveIdx] = useState(() =>
+    computeInitialActive(profile, value)
+  );
 
   // Reset to first item whenever the query changes.
   useEffect(() => {
@@ -125,7 +129,7 @@ export function PublicationPickerContent({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKeyDown}
-        aria-label="Filter publications"
+        aria-label={`Filter ${label}s`}
         className="sr-only"
       />
       {q !== "" && (
@@ -135,7 +139,7 @@ export function PublicationPickerContent({
       )}
       {flatItems.length === 0 && (
         <div className="px-2 py-3 text-sm text-muted-foreground text-center">
-          No publications match
+          No {label}s match
         </div>
       )}
       {q === "" &&
@@ -156,60 +160,61 @@ export function PublicationPickerContent({
               onClick={() => commit(null)}
             >
               <span className="h-5 w-5 rounded bg-muted shrink-0" aria-hidden />
-              No publication
+              No {label}
             </button>
           );
         })()}
-      {PUBLICATION_CATEGORIES.map((category) => {
-        const items = matches.filter((p) => p.category === category);
-        if (items.length === 0) return null;
-        return (
-          <div key={category} className="mt-1">
+      {groups.map((group, gi) => (
+        <div key={group.category ?? `g${gi}`} className="mt-1">
+          {group.category !== null && (
             <div className="px-2 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              {category}
+              {group.category}
             </div>
-            {items.map((p) => {
-              const itemIdx = idx++;
-              return (
-                <button
-                  key={p.slug}
-                  ref={(el) => {
-                    itemRefs.current[itemIdx] = el;
-                  }}
-                  type="button"
-                  className={cn(
-                    "w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm",
-                    activeIdx === itemIdx && "bg-accent",
-                    value === p.slug && "font-medium"
-                  )}
-                  onMouseEnter={() => setActiveIdx(itemIdx)}
-                  onClick={() => commit(p.slug)}
-                >
-                  <img
-                    src={p.thumbnail}
-                    alt=""
-                    className="h-5 w-5 rounded object-cover shrink-0"
-                  />
-                  <span className="truncate">{p.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        );
-      })}
+          )}
+          {group.items.map((p) => {
+            const itemIdx = idx++;
+            return (
+              <button
+                key={p.slug}
+                ref={(el) => {
+                  itemRefs.current[itemIdx] = el;
+                }}
+                type="button"
+                className={cn(
+                  "w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm",
+                  activeIdx === itemIdx && "bg-accent",
+                  value === p.slug && "font-medium"
+                )}
+                onMouseEnter={() => setActiveIdx(itemIdx)}
+                onClick={() => commit(p.slug)}
+              >
+                <img
+                  src={p.thumbnail}
+                  alt=""
+                  className="h-5 w-5 rounded object-cover shrink-0"
+                />
+                <span className="truncate">{p.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      ))}
     </>
   );
 }
 
-// Position of the currently-selected value in the initial unfiltered
-// flat list (No publication first, then categorized publications in
-// definition order). Used to start the keyboard cursor on the current
-// selection so Enter on open is a no-op confirm.
-function computeInitialActive(value: string | null): number {
+// Position of the currently-selected value in the initial unfiltered flat
+// list (No <label> first, then grouped items in definition order). Used to
+// start the keyboard cursor on the current selection so Enter on open is a
+// no-op confirm.
+function computeInitialActive(
+  profile: CatalogProfile,
+  value: string | null
+): number {
   if (value === null) return 0;
   let i = 1;
-  for (const category of PUBLICATION_CATEGORIES) {
-    for (const p of PUBLICATIONS.filter((m) => m.category === category)) {
+  for (const group of groupItems(profile, profile.items)) {
+    for (const p of group.items) {
       if (p.slug === value) return i;
       i++;
     }
@@ -229,8 +234,9 @@ export function PublicationPicker({
   value: string | null;
   onChange: (slug: string | null) => void;
 }) {
+  const profile = useCatalog();
   const [open, setOpen] = useState(false);
-  const current = getPublication(value);
+  const current = catalogItem(profile, value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -246,7 +252,7 @@ export function PublicationPicker({
             <span className="h-5 w-5 rounded bg-muted shrink-0" aria-hidden />
           )}
           <span className="truncate">
-            {current ? current.name : "No publication"}
+            {current ? current.name : `No ${profile.itemLabel.toLowerCase()}`}
           </span>
         </Button>
       </PopoverTrigger>

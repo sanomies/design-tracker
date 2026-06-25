@@ -32,6 +32,7 @@ import {
 } from "@/features/notifications/useNotifications";
 import { useProject } from "@/features/projects/useProjects";
 import { TaskDetailPanel } from "@/features/tasks/TaskDetailPanel";
+import { CatalogProvider } from "@/features/tasks/CatalogProvider";
 import { MobileTaskOverlay } from "@/features/tasks/MobileTaskOverlay";
 import { useTasks } from "@/features/tasks/useTasks";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -224,12 +225,14 @@ export default function InboxPage() {
         >
           <div style={{ width: panelWidth }} className="h-full">
             {selectedTask && (
-              <TaskDetailPanel
-                key={selectedTask.id}
-                task={selectedTask}
-                workspaceId={project?.workspace_id}
-                onClose={closePanel}
-              />
+              <CatalogProvider kind={project?.kind}>
+                <TaskDetailPanel
+                  key={selectedTask.id}
+                  task={selectedTask}
+                  workspaceId={project?.workspace_id}
+                  onClose={closePanel}
+                />
+              </CatalogProvider>
             )}
           </div>
         </aside>

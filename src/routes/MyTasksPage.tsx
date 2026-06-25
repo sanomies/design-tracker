@@ -67,6 +67,8 @@ import { recordTaskOpened } from "@/features/tasks/useRecentTasks";
 import { defaultFilters, matchesFilters, type Filters } from "@/features/tasks/taskFilters";
 import { type SortState } from "@/features/tasks/taskColumns";
 import { buildSortComparator } from "@/features/tasks/taskSort";
+import { CatalogProvider } from "@/features/tasks/CatalogProvider";
+import { MERGED_PROFILE } from "@/features/tasks/catalog";
 import { useWorkspaceMembers } from "@/features/workspaces/useWorkspaceMembers";
 import {
   useCreateMySection,
@@ -109,7 +111,15 @@ export default function MyTasksPage() {
   // resizable panes, context menu) than the mobile board, so swapping the
   // inner content conditionally would change the hook count mid-render.
   const isMobile = useIsMobile();
-  return isMobile ? <MyTasksMobile /> : <MyTasksDesktop />;
+  // My Tasks lists tasks from projects of either kind, so the catalog used
+  // for the column header, filters and sort index is the merged profile.
+  // Each row still renders its own brand/product icon by slug; only the 5
+  // slugs shared by both catalogs fall back to the brand icon variant.
+  return (
+    <CatalogProvider profile={MERGED_PROFILE}>
+      {isMobile ? <MyTasksMobile /> : <MyTasksDesktop />}
+    </CatalogProvider>
+  );
 }
 
 function MyTasksDesktop() {
@@ -180,7 +190,7 @@ function MyTasksDesktop() {
       if (bp === null) return 1;
       return ap - bp;
     };
-    const columnCmp = buildSortComparator(sort, members);
+    const columnCmp = buildSortComparator(sort, members, MERGED_PROFILE);
     const finalCmp = columnCmp ?? sortByMyPosition;
     us.sort(finalCmp);
     for (const arr of by.values()) arr.sort(finalCmp);
@@ -925,14 +935,16 @@ function MyTasksDesktop() {
       >
         <div style={{ width: panelWidth }} className="h-full">
           {selectedTask && !panelFullscreen && (
-            <TaskDetailPanel
-              key={selectedTask.id}
-              task={selectedTask}
-              workspaceId={selectedTask.project?.workspace_id}
-              onClose={closePanel}
-              isFullscreen={false}
-              onToggleFullscreen={() => setPanelFullscreen(true)}
-            />
+            <CatalogProvider kind={selectedTask.project?.kind}>
+              <TaskDetailPanel
+                key={selectedTask.id}
+                task={selectedTask}
+                workspaceId={selectedTask.project?.workspace_id}
+                onClose={closePanel}
+                isFullscreen={false}
+                onToggleFullscreen={() => setPanelFullscreen(true)}
+              />
+            </CatalogProvider>
           )}
         </div>
       </aside>
@@ -961,14 +973,16 @@ function MyTasksDesktop() {
           sidebar) so the task panel takes the whole viewport. */}
       {selectedTask && panelFullscreen && (
         <div className="fixed inset-0 z-50 bg-background">
-          <TaskDetailPanel
-            key={`${selectedTask.id}-fs`}
-            task={selectedTask}
-            workspaceId={selectedTask.project?.workspace_id}
-            onClose={closePanel}
-            isFullscreen
-            onToggleFullscreen={() => setPanelFullscreen(false)}
-          />
+          <CatalogProvider kind={selectedTask.project?.kind}>
+            <TaskDetailPanel
+              key={`${selectedTask.id}-fs`}
+              task={selectedTask}
+              workspaceId={selectedTask.project?.workspace_id}
+              onClose={closePanel}
+              isFullscreen
+              onToggleFullscreen={() => setPanelFullscreen(false)}
+            />
+          </CatalogProvider>
         </div>
       )}
 
@@ -1058,12 +1072,16 @@ function MyTasksMobile() {
       <MobileMyTasksList />
 
       {/* Slides in from the right on open, back out on close; stops above
-          the bottom tab bar so the nav stays reachable. */}
-      <MobileTaskOverlay
-        task={selectedTask}
-        workspaceId={selectedTask?.project?.workspace_id}
-        onClose={closePanel}
-      />
+          the bottom tab bar so the nav stays reachable. The overlay (the
+          editor) resolves the opened task's own project kind so its
+          brand/type pickers offer the right options. */}
+      <CatalogProvider kind={selectedTask?.project?.kind}>
+        <MobileTaskOverlay
+          task={selectedTask}
+          workspaceId={selectedTask?.project?.workspace_id}
+          onClose={closePanel}
+        />
+      </CatalogProvider>
     </div>
   );
 }
