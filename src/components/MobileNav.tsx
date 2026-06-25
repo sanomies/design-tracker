@@ -6,6 +6,7 @@ import {
 } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
+  Archive,
   ChevronDown,
   Folder,
   LogOut,
@@ -279,6 +280,12 @@ function MobileProjectsSheet({
   const unseen = useUnseenProjects();
   const navigate = useNavigate();
   const [newOpen, setNewOpen] = useState(false);
+  // Archive is a collapsible group below the active list, default-open so
+  // it's visible the first time it appears. `archived` reads as undefined on
+  // rows fetched before the 0037 migration — treat missing as not-archived.
+  const [archiveOpen, setArchiveOpen] = useState(true);
+  const active = (projects ?? []).filter((p) => !p.archived);
+  const archived = (projects ?? []).filter((p) => p.archived);
 
   return (
     <>
@@ -314,7 +321,7 @@ function MobileProjectsSheet({
 
           <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-6 pt-2">
             <ul className="flex flex-col gap-2">
-              {(projects ?? []).map((project) => (
+              {active.map((project) => (
                 <MobileProjectCard
                   key={project.id}
                   project={project}
@@ -322,7 +329,7 @@ function MobileProjectsSheet({
                   onOpen={() => navigate(`/projects/${project.id}`)}
                 />
               ))}
-              {projects && projects.length === 0 && (
+              {projects && active.length === 0 && (
                 <li>
                   <button
                     type="button"
@@ -334,6 +341,44 @@ function MobileProjectsSheet({
                 </li>
               )}
             </ul>
+
+            {/* Archive — collapsible group below the active list, shown only
+                once something's been archived. Header mirrors the Projects
+                header (icon + title) but carries a collapse chevron instead
+                of the new-project plus. Matches the desktop sidebar. */}
+            {archived.length > 0 && (
+              <div className="mt-4 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setArchiveOpen((o) => !o)}
+                  aria-expanded={archiveOpen}
+                  className="flex w-full items-center gap-2 py-2 text-left"
+                >
+                  <Archive className="h-6 w-6 shrink-0 text-foreground" strokeWidth={1.75} />
+                  <span className="flex-1 text-lg font-semibold leading-tight text-foreground">
+                    Archive
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-[18px] w-[18px] shrink-0 text-foreground transition-transform",
+                      !archiveOpen && "-rotate-90"
+                    )}
+                  />
+                </button>
+                {archiveOpen && (
+                  <ul className="flex flex-col gap-2">
+                    {archived.map((project) => (
+                      <MobileProjectCard
+                        key={project.id}
+                        project={project}
+                        hasUnseen={unseen.has(project.id)}
+                        onOpen={() => navigate(`/projects/${project.id}`)}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         </SheetContent>
       </Sheet>
