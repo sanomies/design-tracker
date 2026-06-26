@@ -2,10 +2,13 @@ import { Outlet } from "react-router-dom";
 
 import { MobileBottomNav } from "@/components/MobileNav";
 import { Sidebar } from "@/components/Sidebar";
+import { useAppBadge } from "@/features/notifications/useAppBadge";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 export function AppShell() {
   const isMobile = useIsMobile();
+  // Reflect the inbox unread count on the installed-app (PWA) icon badge.
+  useAppBadge();
 
   if (isMobile) {
     return (
